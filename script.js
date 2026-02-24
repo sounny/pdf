@@ -51,6 +51,7 @@ async function handleFile(file) {
 
     addTextBtn.classList.remove('hidden');
     addTextBtn.disabled = false;
+    document.getElementById('symbolsGroup').classList.remove('hidden');
     document.getElementById('textToolbar').classList.remove('hidden');
     addSignatureBtn.classList.remove('hidden');
     addSignatureBtn.disabled = false;
@@ -120,9 +121,10 @@ function getVisiblePage() {
 }
 
 // Add Text Functionality
-addTextBtn.addEventListener('click', () => {
+// Common function for adding draggable text/symbols
+function addTextOverlay(defaultText, isEditable = true) {
     const targetPage = getVisiblePage();
-    if (!targetPage) return;
+    if (!targetPage) return null;
 
     const wrapper = document.createElement('div');
     wrapper.className = 'draggable-text active';
@@ -131,13 +133,20 @@ addTextBtn.addEventListener('click', () => {
 
     const textContent = document.createElement('div');
     textContent.className = 'text-content';
-    textContent.innerText = 'Double-click to edit';
+    textContent.innerText = defaultText;
     textContent.style.whiteSpace = 'pre-wrap';
     textContent.style.wordBreak = 'break-word';
     textContent.style.lineHeight = '1.2';
     textContent.style.outline = 'none';
-    textContent.style.minWidth = '50px';
-    textContent.style.cursor = 'text';
+    textContent.style.minWidth = '20px';
+
+    if (isEditable) {
+        textContent.style.cursor = 'text';
+    } else {
+        textContent.style.cursor = 'move';
+        // Make symbols slightly larger by default
+        textContent.style.fontSize = '24px';
+    }
 
     const deleteBtn = document.createElement('div');
     deleteBtn.className = 'text-delete-btn';
@@ -153,30 +162,54 @@ addTextBtn.addEventListener('click', () => {
 
     makeDraggable(wrapper, targetPage);
 
-    wrapper.addEventListener('dblclick', () => {
-        textContent.contentEditable = true;
-        textContent.focus();
-        document.execCommand('selectAll', false, null);
-    });
+    if (isEditable) {
+        wrapper.addEventListener('dblclick', () => {
+            textContent.contentEditable = true;
+            textContent.focus();
+            document.execCommand('selectAll', false, null);
+        });
+
+        textContent.addEventListener('blur', () => {
+            textContent.contentEditable = false;
+            if (textContent.innerText.trim() === '') {
+                textContent.innerText = defaultText;
+            }
+        });
+    }
 
     wrapper.addEventListener('mousedown', () => {
         document.querySelectorAll('.draggable-text, .draggable-signature').forEach(el => el.classList.remove('active'));
         wrapper.classList.add('active');
     });
 
-    textContent.addEventListener('blur', () => {
-        textContent.contentEditable = false;
-        if (textContent.innerText.trim() === '') {
-            textContent.innerText = 'Double-click to edit';
-        }
-    });
-
     document.addEventListener('click', (e) => {
-        if (!wrapper.contains(e.target) && e.target.id !== 'addTextBtn' && e.target.id !== 'btnDecreaseText' && e.target.id !== 'btnIncreaseText') {
+        if (!wrapper.contains(e.target) &&
+            !e.target.closest('#addTextBtn') &&
+            !e.target.closest('#symbolsGroup') &&
+            !e.target.closest('#textToolbar')) {
             wrapper.classList.remove('active');
         }
     });
+
+    return wrapper;
+}
+
+// Add Text Functionality
+addTextBtn.addEventListener('click', () => {
+    const wrapper = addTextOverlay('Double-click to edit', true);
+    if (wrapper) {
+        // Trigger focus for quick edit on regular text blocks
+        const txt = wrapper.querySelector('.text-content');
+        txt.contentEditable = true;
+        txt.focus();
+        document.execCommand('selectAll', false, null);
+    }
 });
+
+// Symbols Functionality
+document.getElementById('addCheckBtn').addEventListener('click', () => addTextOverlay('✔', false));
+document.getElementById('addXBtn').addEventListener('click', () => addTextOverlay('✗', false));
+document.getElementById('addCircleBtn').addEventListener('click', () => addTextOverlay('⬤', false));
 
 // Font size functionality
 const btnIncreaseText = document.getElementById('btnIncreaseText');
