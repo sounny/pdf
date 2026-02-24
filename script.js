@@ -479,10 +479,16 @@ saveBtn.addEventListener('click', async () => {
 
     try {
         const freshBuffer = await currentPdfFile.arrayBuffer();
-        const { PDFDocument, rgb } = window.PDFLib;
+        const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
         const pdfDoc = await PDFDocument.load(freshBuffer, {
             ignoreEncryption: true
         });
+
+        // Helvetica is default for standard text
+        const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        // ZapfDingbats supports standard symbols (Checks, X's)
+        const dingbatsFont = await pdfDoc.embedFont(StandardFonts.ZapfDingbats);
+
         const pages = pdfDoc.getPages();
 
         // ... rest of saving code to remain unchanged except what is above
@@ -528,11 +534,28 @@ saveBtn.addEventListener('click', async () => {
                 const pdfFontSize = (fontSize / pData.scale) * 1.25;
                 const lineHeight = pdfFontSize * 1.2;
 
-                pdfPage.drawText(textContent, {
+                // Handle special symbols that crash standard Helvetica
+                let fontToUse = helveticaFont;
+                let textToDraw = textContent;
+
+                // Map unicode symbols to ZapfDingbats standard positions
+                if (textContent === '✔') {
+                    fontToUse = dingbatsFont;
+                    textToDraw = String.fromCharCode(52); // Dingbats Checkmark
+                } else if (textContent === '✗') {
+                    fontToUse = dingbatsFont;
+                    textToDraw = String.fromCharCode(56); // Dingbats X
+                } else if (textContent === '⬤') {
+                    fontToUse = dingbatsFont;
+                    textToDraw = String.fromCharCode(108); // Dingbats Solid Circle
+                }
+
+                pdfPage.drawText(textToDraw, {
                     x: pdfX + 2, // Slight padding adjustment
                     y: pdfY_top - pdfFontSize, // Align top baseline
                     size: pdfFontSize,
                     lineHeight: lineHeight,
+                    font: fontToUse,
                     color: rgb(0, 0, 0),
                 });
             });
