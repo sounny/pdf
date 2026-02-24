@@ -39,6 +39,7 @@ body {
     box-shadow: var(--shadow-sm);
     z-index: 10;
     border-bottom: 2px solid var(--primary-color);
+    position: relative;
 }
 
 .logo {
