@@ -382,6 +382,13 @@ main {
     display: none !important;
 }
 
+/* Tablet/Intermediate Responsiveness */
+@media (max-width: 1100px) {
+    .instruction-text {
+        display: none !important;
+    }
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
     .navbar {
