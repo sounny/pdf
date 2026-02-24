@@ -65,7 +65,11 @@ async function renderPDF(pdfBytes) {
     pdfContainer.innerHTML = '';
     pagesData = [];
 
-    const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+    const loadingTask = pdfjsLib.getDocument({
+        data: pdfBytes,
+        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+        cMapPacked: true
+    });
     pdfDocumentObj = await loadingTask.promise;
 
     for (let pageNum = 1; pageNum <= pdfDocumentObj.numPages; pageNum++) {
@@ -402,13 +406,14 @@ function extractTextSafely(element) {
 
 // Saving using pdf-lib
 saveBtn.addEventListener('click', async () => {
-    if (!currentPdfBytes) return;
+    if (!currentPdfFile) return;
     saveBtn.innerText = 'Saving...';
     saveBtn.disabled = true;
 
     try {
+        const freshBuffer = await currentPdfFile.arrayBuffer();
         const { PDFDocument, rgb } = window.PDFLib;
-        const pdfDoc = await PDFDocument.load(currentPdfBytes, {
+        const pdfDoc = await PDFDocument.load(freshBuffer, {
             ignoreEncryption: true
         });
         const pages = pdfDoc.getPages();
