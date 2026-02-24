@@ -8,6 +8,9 @@ let currentPdfBytes = null;
 let currentPdfFile = null;
 let pagesData = []; // Store page dimensions
 let pdfDocumentObj = null;
+let currentScale = 1.0;
+let defaultScale = 1.0;
+let widthFitScale = 1.0;
 
 // UI Elements
 const uploadArea = document.getElementById('uploadArea');
@@ -52,6 +55,7 @@ async function handleFile(file) {
 
     addTextBtn.classList.remove('hidden');
     addTextBtn.disabled = false;
+    document.getElementById('zoomGroup').classList.remove('hidden');
     document.getElementById('symbolsGroup').classList.remove('hidden');
     document.getElementById('textToolbar').classList.remove('hidden');
     addSignatureBtn.classList.remove('hidden');
@@ -63,16 +67,18 @@ async function handleFile(file) {
     renderPDF(currentPdfBytes);
 }
 
-async function renderPDF(pdfBytes) {
+async function renderPDF(pdfBytes, renderScale = null) {
     pdfContainer.innerHTML = '';
     pagesData = [];
 
-    const loadingTask = pdfjsLib.getDocument({
-        data: pdfBytes,
-        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-        cMapPacked: true
-    });
-    pdfDocumentObj = await loadingTask.promise;
+    if (!pdfDocumentObj) {
+        const loadingTask = pdfjsLib.getDocument({
+            data: pdfBytes,
+            cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+            cMapPacked: true
+        });
+        pdfDocumentObj = await loadingTask.promise;
+    }
 
     for (let pageNum = 1; pageNum <= pdfDocumentObj.numPages; pageNum++) {
         const page = await pdfDocumentObj.getPage(pageNum);
@@ -80,18 +86,24 @@ async function renderPDF(pdfBytes) {
         const availableHeight = window.innerHeight - document.querySelector('.navbar').offsetHeight - 40;
         const availableWidth = pdfContainer.clientWidth - 40;
 
-        // Calculate scale for "Full Page View" (fitting vertical height)
-        let scale = availableHeight / unscaledViewport.height;
+        if (renderScale === null) {
+            // Calculate scale for "Full Page View" (fitting vertical height)
+            let scaleFitPage = availableHeight / unscaledViewport.height;
 
-        // Ensure it doesn't overflow horizontally on narrow mobile screens
-        if (unscaledViewport.width * scale > availableWidth) {
-            scale = availableWidth / unscaledViewport.width;
+            // Ensure it doesn't overflow horizontally on narrow mobile screens
+            if (unscaledViewport.width * scaleFitPage > availableWidth) {
+                scaleFitPage = availableWidth / unscaledViewport.width;
+            }
+            // Prevent it from being too tiny or incredibly huge
+            defaultScale = Math.max(0.5, Math.min(scaleFitPage, 3.0));
+            widthFitScale = availableWidth / unscaledViewport.width;
+            currentScale = defaultScale;
+        } else {
+            currentScale = renderScale;
         }
 
-        // Prevent it from being too tiny or incredibly huge
-        scale = Math.max(0.5, Math.min(scale, 3.0));
-
-        const viewport = page.getViewport({ scale: scale });
+        document.getElementById('zoomLabel').innerText = Math.round(currentScale * 100) + '%';
+        const viewport = page.getViewport({ scale: currentScale });
 
         const wrapper = document.createElement('div');
         wrapper.className = 'pdf-page-wrapper';
@@ -110,7 +122,7 @@ async function renderPDF(pdfBytes) {
             pageNumber: pageNum,
             width: viewport.width,
             height: viewport.height,
-            scale: scale,
+            scale: currentScale,
             originalWidth: viewport.viewBox[2],   // width in pdf points
             originalHeight: viewport.viewBox[3]   // height in pdf points
         });
@@ -122,6 +134,20 @@ async function renderPDF(pdfBytes) {
         await page.render(renderContext).promise;
     }
 }
+
+// Zoom Controls
+document.getElementById('zoomInBtn').addEventListener('click', () => {
+    if (currentScale < 3.0) renderPDF(currentPdfBytes, currentScale + 0.25);
+});
+document.getElementById('zoomOutBtn').addEventListener('click', () => {
+    if (currentScale > 0.5) renderPDF(currentPdfBytes, currentScale - 0.25);
+});
+document.getElementById('zoomFitWidthBtn').addEventListener('click', () => {
+    renderPDF(currentPdfBytes, widthFitScale);
+});
+document.getElementById('zoomFitPageBtn').addEventListener('click', () => {
+    renderPDF(currentPdfBytes, defaultScale);
+});
 
 function getVisiblePage() {
     const pages = document.querySelectorAll('.pdf-page-wrapper');
