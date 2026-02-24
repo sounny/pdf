@@ -76,7 +76,21 @@ async function renderPDF(pdfBytes) {
 
     for (let pageNum = 1; pageNum <= pdfDocumentObj.numPages; pageNum++) {
         const page = await pdfDocumentObj.getPage(pageNum);
-        const scale = 1.5;
+        const unscaledViewport = page.getViewport({ scale: 1.0 });
+        const availableHeight = window.innerHeight - document.querySelector('.navbar').offsetHeight - 40;
+        const availableWidth = pdfContainer.clientWidth - 40;
+
+        // Calculate scale for "Full Page View" (fitting vertical height)
+        let scale = availableHeight / unscaledViewport.height;
+
+        // Ensure it doesn't overflow horizontally on narrow mobile screens
+        if (unscaledViewport.width * scale > availableWidth) {
+            scale = availableWidth / unscaledViewport.width;
+        }
+
+        // Prevent it from being too tiny or incredibly huge
+        scale = Math.max(0.5, Math.min(scale, 3.0));
+
         const viewport = page.getViewport({ scale: scale });
 
         const wrapper = document.createElement('div');
