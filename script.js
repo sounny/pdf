@@ -502,6 +502,16 @@ saveBtn.addEventListener('click', async () => {
             }
         }
 
+        // Flatten any existing interactive form fields so they don't block the user's overlaid text
+        try {
+            const form = pdfDoc.getForm();
+            if (form) {
+                form.flatten();
+            }
+        } catch (err) {
+            console.warn("No form to flatten or flattening failed:", err);
+        }
+
         const pdfBytes = await pdfDoc.save();
         download(pdfBytes, "filled_document.pdf", "application/pdf");
 
