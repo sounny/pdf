@@ -216,8 +216,23 @@ document.getElementById('addCircleBtn').addEventListener('click', () => addTextO
 const mobileMenuBtn = document.getElementById('mobileMenuBtn');
 const actionsMenu = document.getElementById('actionsMenu');
 if (mobileMenuBtn && actionsMenu) {
-    mobileMenuBtn.addEventListener('click', () => {
+    mobileMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // prevent immediate close by document listener
         actionsMenu.classList.toggle('show');
+    });
+
+    // Auto-close menu on document click outside
+    document.addEventListener('click', (e) => {
+        if (!actionsMenu.contains(e.target) && !mobileMenuBtn.contains(e.target)) {
+            actionsMenu.classList.remove('show');
+        }
+    });
+
+    // Auto-close menu when a button inside is clicked
+    actionsMenu.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            actionsMenu.classList.remove('show');
+        });
     });
 }
 
@@ -612,7 +627,7 @@ saveBtn.addEventListener('click', async () => {
         console.error(e);
         alert('An error occurred while saving the PDF.');
     } finally {
-        saveBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Save & Download';
+        saveBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Save';
         saveBtn.disabled = false;
     }
 });
