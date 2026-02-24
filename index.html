@@ -23,14 +23,6 @@
     <header class="navbar">
         <div class="logo">Sounny<span>PDF</span></div>
         <div class="actions">
-            <!-- Text Toolbar -->
-            <div id="textToolbar" class="hidden"
-                style="display:flex; gap: 0.5rem; align-items: center; border-right: 1px solid var(--border-color); padding-right: 1rem;">
-                <button id="btnDecreaseText" class="btn secondary" style="padding: 0.25rem 0.5rem"
-                    title="Decrease font size">A-</button>
-                <button id="btnIncreaseText" class="btn secondary" style="padding: 0.25rem 0.5rem"
-                    title="Increase font size">A+</button>
-            </div>
             <!-- Instructions and Tools -->
             <span class="instruction-text" id="instructionText">Upload a PDF to begin</span>
             <button id="addTextBtn" class="btn secondary hidden" disabled>
@@ -41,6 +33,14 @@
                 </svg>
                 Type Text
             </button>
+
+            <!-- Text Toolbar (Size Controls) -->
+            <div id="textToolbar" class="hidden" style="display:flex; gap: 0.5rem; align-items: center;">
+                <button id="btnDecreaseText" class="btn secondary" style="padding: 0.25rem 0.5rem"
+                    title="Decrease font size">A-</button>
+                <button id="btnIncreaseText" class="btn secondary" style="padding: 0.25rem 0.5rem"
+                    title="Increase font size">A+</button>
+            </div>
 
             <div id="symbolsGroup" class="hidden" style="display:flex; gap: 0.25rem;">
                 <button id="addCheckBtn" class="btn secondary" style="padding: 0.25rem 0.5rem;" title="Add Checkmark">
