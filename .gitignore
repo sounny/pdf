@@ -1,3 +1,6 @@
 node_modules/
 package-lock.json
 package.json
+agents.md
+test_html.html
+test_dingbats.js
