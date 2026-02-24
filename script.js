@@ -209,8 +209,17 @@ addTextBtn.addEventListener('click', () => {
 
 // Symbols Functionality
 document.getElementById('addCheckBtn').addEventListener('click', () => addTextOverlay('✔', false));
-document.getElementById('addXBtn').addEventListener('click', () => addTextOverlay('✗', false));
-document.getElementById('addCircleBtn').addEventListener('click', () => addTextOverlay('⬤', false));
+document.getElementById('addXBtn').addEventListener('click', () => addTextOverlay('✘', false));
+document.getElementById('addCircleBtn').addEventListener('click', () => addTextOverlay('●', false));
+
+// Mobile Menu Toggle
+const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+const actionsMenu = document.getElementById('actionsMenu');
+if (mobileMenuBtn && actionsMenu) {
+    mobileMenuBtn.addEventListener('click', () => {
+        actionsMenu.classList.toggle('show');
+    });
+}
 
 // Font size functionality
 const btnIncreaseText = document.getElementById('btnIncreaseText');
@@ -539,16 +548,9 @@ saveBtn.addEventListener('click', async () => {
                 let fontToUse = helveticaFont;
                 let textToDraw = textContent;
 
-                // Map unicode symbols to ZapfDingbats standard positions
-                if (textContent === '✔') {
+                // Use ZapfDingbats which natively supports these Unicode symbols in pdf-lib
+                if (textContent === '✔' || textContent === '✘' || textContent === '●') {
                     fontToUse = dingbatsFont;
-                    textToDraw = String.fromCharCode(52); // Dingbats Checkmark
-                } else if (textContent === '✗') {
-                    fontToUse = dingbatsFont;
-                    textToDraw = String.fromCharCode(56); // Dingbats X
-                } else if (textContent === '⬤') {
-                    fontToUse = dingbatsFont;
-                    textToDraw = String.fromCharCode(108); // Dingbats Solid Circle
                 }
 
                 pdfPage.drawText(textToDraw, {

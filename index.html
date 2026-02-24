@@ -22,7 +22,15 @@
 <body>
     <header class="navbar">
         <div class="logo">Sounny<span>PDF</span></div>
-        <div class="actions">
+        <button id="mobileMenuBtn" class="btn secondary mobile-menu-btn" style="padding: 0.5rem; display: none;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+        <div class="actions" id="actionsMenu">
             <!-- Instructions and Tools -->
             <span class="instruction-text" id="instructionText">Upload a PDF to begin</span>
             <button id="addTextBtn" class="btn secondary hidden" disabled>
