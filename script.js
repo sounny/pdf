@@ -45,8 +45,9 @@ async function handleFile(file) {
     const arrayBuffer = await file.arrayBuffer();
     currentPdfBytes = new Uint8Array(arrayBuffer);
 
-    // Hide upload area, show PDF container
+    // Hide upload area and text, show PDF container
     uploadArea.classList.add('hidden');
+    document.getElementById('madeWithLove').classList.add('hidden');
     pdfContainer.classList.remove('hidden');
 
     addTextBtn.classList.remove('hidden');
