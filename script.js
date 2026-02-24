@@ -1,0 +1,466 @@
+/* script.js */
+
+// Use pdfjsLib from the global scope (loaded via CDN)
+const pdfjsLib = window['pdfjs-dist/build/pdf'];
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let currentPdfBytes = null;
+let currentPdfFile = null;
+let pagesData = []; // Store page dimensions
+let pdfDocumentObj = null;
+
+// UI Elements
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+const pdfContainer = document.getElementById('pdfContainer');
+const addTextBtn = document.getElementById('addTextBtn');
+const addSignatureBtn = document.getElementById('addSignatureBtn');
+const saveBtn = document.getElementById('saveBtn');
+const instructionText = document.getElementById('instructionText');
+
+// Drag and Drop
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+        handleFile(e.dataTransfer.files[0]);
+    }
+});
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+        handleFile(e.target.files[0]);
+    }
+});
+
+async function handleFile(file) {
+    if (file.type !== 'application/pdf') {
+        alert('Please upload a valid PDF file.');
+        return;
+    }
+
+    currentPdfFile = file;
+    const arrayBuffer = await file.arrayBuffer();
+    currentPdfBytes = new Uint8Array(arrayBuffer);
+
+    // Hide upload area, show PDF container
+    uploadArea.classList.add('hidden');
+    pdfContainer.classList.remove('hidden');
+
+    addTextBtn.classList.remove('hidden');
+    addTextBtn.disabled = false;
+    addSignatureBtn.classList.remove('hidden');
+    addSignatureBtn.disabled = false;
+    saveBtn.classList.remove('hidden');
+    saveBtn.disabled = false;
+    instructionText.innerText = 'Add text/signature and Drag to position';
+
+    renderPDF(currentPdfBytes);
+}
+
+async function renderPDF(pdfBytes) {
+    pdfContainer.innerHTML = '';
+    pagesData = [];
+
+    const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+    pdfDocumentObj = await loadingTask.promise;
+
+    for (let pageNum = 1; pageNum <= pdfDocumentObj.numPages; pageNum++) {
+        const page = await pdfDocumentObj.getPage(pageNum);
+        const scale = 1.5;
+        const viewport = page.getViewport({ scale: scale });
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'pdf-page-wrapper';
+        wrapper.style.width = `${viewport.width}px`;
+        wrapper.style.height = `${viewport.height}px`;
+        wrapper.dataset.pageNumber = pageNum;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        wrapper.appendChild(canvas);
+        pdfContainer.appendChild(wrapper);
+
+        pagesData.push({
+            pageNumber: pageNum,
+            width: viewport.width,
+            height: viewport.height,
+            scale: scale,
+            originalWidth: viewport.viewBox[2],   // width in pdf points
+            originalHeight: viewport.viewBox[3]   // height in pdf points
+        });
+
+        const renderContext = {
+            canvasContext: canvas.getContext('2d'),
+            viewport: viewport
+        };
+        await page.render(renderContext).promise;
+    }
+}
+
+function getVisiblePage() {
+    const pages = document.querySelectorAll('.pdf-page-wrapper');
+    if (!pages.length) return null;
+    for (let i = 0; i < pages.length; i++) {
+        const rect = pages[i].getBoundingClientRect();
+        if (rect.top >= 0 || rect.bottom > window.innerHeight / 2) {
+            return pages[i];
+        }
+    }
+    return pages[0];
+}
+
+// Add Text Functionality
+addTextBtn.addEventListener('click', () => {
+    const targetPage = getVisiblePage();
+    if (!targetPage) return;
+
+    const textDiv = document.createElement('div');
+    textDiv.className = 'draggable-text active';
+    textDiv.contentEditable = true;
+    textDiv.innerText = 'Type here';
+    textDiv.style.left = '50px';
+    textDiv.style.top = '50px';
+    // Style adjustments for cleaner multiline
+    textDiv.style.whiteSpace = 'pre-wrap';
+    textDiv.style.wordBreak = 'break-word';
+    textDiv.style.lineHeight = '1.2';
+
+    const deleteBtn = document.createElement('div');
+    deleteBtn.className = 'text-delete-btn';
+    deleteBtn.innerHTML = '×';
+    deleteBtn.contentEditable = false;
+    deleteBtn.onclick = (e) => {
+        e.stopPropagation(); // Avoid triggering any outside click event
+        textDiv.remove();
+    };
+
+    textDiv.appendChild(deleteBtn);
+    targetPage.appendChild(textDiv);
+
+    makeDraggable(textDiv, targetPage);
+    textDiv.focus();
+
+    document.execCommand('selectAll', false, null);
+
+    textDiv.addEventListener('focus', () => textDiv.classList.add('active'));
+    textDiv.addEventListener('blur', () => textDiv.classList.remove('active'));
+});
+
+// Signature Drag Functionality
+function addSignatureToPage(imgData) {
+    const targetPage = getVisiblePage();
+    if (!targetPage) return;
+
+    const sigDiv = document.createElement('div');
+    sigDiv.className = 'draggable-signature active';
+    sigDiv.style.left = '50px';
+    sigDiv.style.top = '50px';
+
+    const img = document.createElement('img');
+    img.src = imgData;
+    img.style.height = '60px';
+
+    const deleteBtn = document.createElement('div');
+    deleteBtn.className = 'text-delete-btn';
+    deleteBtn.innerHTML = '×';
+    deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        sigDiv.remove();
+    };
+
+    sigDiv.appendChild(img);
+    sigDiv.appendChild(deleteBtn);
+    targetPage.appendChild(sigDiv);
+
+    makeDraggable(sigDiv, targetPage);
+
+
+    document.addEventListener('click', (e) => {
+        if (!sigDiv.contains(e.target) && !e.target.closest('#addSignatureBtn')) {
+            sigDiv.classList.remove('active');
+        }
+    });
+    sigDiv.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.querySelectorAll('.draggable-signature').forEach(el => el.classList.remove('active'));
+        sigDiv.classList.add('active');
+    });
+}
+
+function makeDraggable(element, container) {
+    let isDragging = false;
+    let startX, startY, initialX, initialY;
+
+    element.addEventListener('mousedown', dragStart);
+
+    function dragStart(e) {
+        if (e.target.classList.contains('text-delete-btn')) return;
+
+        if (element.contentEditable === "true" && document.activeElement === element) {
+            return;
+        }
+
+        element.classList.add('active');
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        initialX = element.offsetLeft;
+        initialY = element.offsetTop;
+
+        document.addEventListener('mousemove', drag);
+        document.addEventListener('mouseup', dragEnd);
+    }
+
+    function drag(e) {
+        if (!isDragging) return;
+        e.preventDefault();
+
+        let dx = e.clientX - startX;
+        let dy = e.clientY - startY;
+
+        let newX = initialX + dx;
+        let newY = initialY + dy;
+
+        if (newX < 0) newX = 0;
+        if (newY < 0) newY = 0;
+        if (newX + element.offsetWidth > container.offsetWidth) newX = container.offsetWidth - element.offsetWidth;
+        if (newY + element.offsetHeight > container.offsetHeight) newY = container.offsetHeight - element.offsetHeight;
+
+        element.style.left = newX + 'px';
+        element.style.top = newY + 'px';
+    }
+
+    function dragEnd() {
+        isDragging = false;
+        document.removeEventListener('mousemove', drag);
+        document.removeEventListener('mouseup', dragEnd);
+    }
+}
+
+// Signature Pad Logic
+const signatureModal = document.getElementById('signatureModal');
+const closeModalBtn = document.getElementById('closeModalBtn');
+const clearSignatureBtn = document.getElementById('clearSignatureBtn');
+const insertSignatureBtn = document.getElementById('insertSignatureBtn');
+const signatureCanvas = document.getElementById('signatureCanvas');
+const ctx = signatureCanvas.getContext('2d');
+let drawing = false;
+
+addSignatureBtn.addEventListener('click', () => {
+    signatureModal.classList.remove('hidden');
+    clearCanvas();
+});
+
+closeModalBtn.addEventListener('click', () => {
+    signatureModal.classList.add('hidden');
+});
+
+clearSignatureBtn.addEventListener('click', clearCanvas);
+
+insertSignatureBtn.addEventListener('click', () => {
+    if (isCanvasBlank(signatureCanvas)) {
+        alert("Please draw a signature first.");
+        return;
+    }
+    const dataURL = signatureCanvas.toDataURL('image/png');
+    addSignatureToPage(dataURL);
+    signatureModal.classList.add('hidden');
+});
+
+// Canvas drawing events
+signatureCanvas.addEventListener('mousedown', startPosition);
+signatureCanvas.addEventListener('mouseup', endPosition);
+signatureCanvas.addEventListener('mouseout', endPosition);
+signatureCanvas.addEventListener('mousemove', draw);
+
+signatureCanvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const mouseEvent = new MouseEvent('mousedown', {
+        clientX: touch.clientX,
+        clientY: touch.clientY
+    });
+    signatureCanvas.dispatchEvent(mouseEvent);
+}, { passive: false });
+
+signatureCanvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    const mouseEvent = new MouseEvent('mouseup', {});
+    signatureCanvas.dispatchEvent(mouseEvent);
+}, { passive: false });
+
+signatureCanvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const mouseEvent = new MouseEvent('mousemove', {
+        clientX: touch.clientX,
+        clientY: touch.clientY
+    });
+    signatureCanvas.dispatchEvent(mouseEvent);
+}, { passive: false });
+
+function startPosition(e) {
+    drawing = true;
+    draw(e);
+}
+
+function endPosition() {
+    drawing = false;
+    ctx.beginPath();
+}
+
+function draw(e) {
+    if (!drawing) return;
+
+    const rect = signatureCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#000';
+
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+}
+
+function clearCanvas() {
+    ctx.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+}
+
+function isCanvasBlank(canvas) {
+    const blank = document.createElement('canvas');
+    blank.width = canvas.width;
+    blank.height = canvas.height;
+    return canvas.toDataURL() === blank.toDataURL();
+}
+
+// Extract pure text ignoring the delete button
+function extractTextSafely(element) {
+    let text = '';
+    for (const node of element.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            text += node.textContent;
+        } else if (node.nodeName === 'DIV' || node.nodeName === 'BR') {
+            if (node.classList && node.classList.contains('text-delete-btn')) continue;
+            // A new div or br usually means a new line in contenteditable
+            text += '\n' + extractTextSafely(node);
+        }
+    }
+    return text.replace(/\n{2,}/g, '\n'); // simple cleanup
+}
+
+// Saving using pdf-lib
+saveBtn.addEventListener('click', async () => {
+    if (!currentPdfBytes) return;
+    saveBtn.innerText = 'Saving...';
+    saveBtn.disabled = true;
+
+    try {
+        const { PDFDocument, rgb } = PDFLib;
+        const pdfDoc = await PDFDocument.load(currentPdfBytes);
+        const pages = pdfDoc.getPages();
+
+        const wrappers = document.querySelectorAll('.pdf-page-wrapper');
+
+        for (let i = 0; i < wrappers.length; i++) {
+            const wrapper = wrappers[i];
+            const pageNum = parseInt(wrapper.dataset.pageNumber, 10);
+            const pdfPage = pages[pageNum - 1]; // 0-indexed
+
+            const pData = pagesData.find(p => p.pageNumber === pageNum);
+            if (!pData) continue;
+
+            const containerWidth = pData.width;
+            const containerHeight = pData.height;
+            const pdfOriginalWidth = pData.originalWidth;
+            const pdfOriginalHeight = pData.originalHeight;
+
+            // Process Texts
+            const texts = wrapper.querySelectorAll('.draggable-text');
+            texts.forEach(tf => {
+                const textContent = extractTextSafely(tf).trim();
+                if (!textContent) return;
+
+                const left = parseFloat(tf.style.left) || 0;
+                const top = parseFloat(tf.style.top) || 0;
+
+                // HTML mapped top to PDF (PDF y=0 is bottom)
+                const pdfY_top = ((containerHeight - top) / containerHeight) * pdfOriginalHeight;
+                const pdfX = (left / containerWidth) * pdfOriginalWidth;
+
+                const fontSize = 14;
+                const pdfFontSize = (fontSize / pData.scale) * 1.25;
+                const lineHeight = pdfFontSize * 1.2;
+
+                pdfPage.drawText(textContent, {
+                    x: pdfX + 2, // Slight padding adjustment
+                    y: pdfY_top - pdfFontSize, // Align top baseline
+                    size: pdfFontSize,
+                    lineHeight: lineHeight,
+                    color: rgb(0, 0, 0),
+                });
+            });
+
+            // Process Signatures
+            const signatures = wrapper.querySelectorAll('.draggable-signature');
+            for (let j = 0; j < signatures.length; j++) {
+                const sig = signatures[j];
+                const imgEl = sig.querySelector('img');
+                const imgDataUrl = imgEl.src;
+
+                const imgBytes = await fetch(imgDataUrl).then(res => res.arrayBuffer());
+                const pdfImage = await pdfDoc.embedPng(imgBytes);
+
+                const left = parseFloat(sig.style.left) || 0;
+                const top = parseFloat(sig.style.top) || 0;
+                const sigWidth = sig.offsetWidth;
+                const sigHeight = sig.offsetHeight;
+
+                // For images we need the bottom coordinate
+                const bottom = containerHeight - (top + sigHeight);
+
+                const pdfX = (left / containerWidth) * pdfOriginalWidth;
+                const pdfY = (bottom / containerHeight) * pdfOriginalHeight;
+                const pdfW = (sigWidth / containerWidth) * pdfOriginalWidth;
+                const pdfH = (sigHeight / containerHeight) * pdfOriginalHeight;
+
+                pdfPage.drawImage(pdfImage, {
+                    x: pdfX,
+                    y: pdfY,
+                    width: pdfW,
+                    height: pdfH
+                });
+            }
+        }
+
+        const pdfBytes = await pdfDoc.save();
+        download(pdfBytes, "filled_document.pdf", "application/pdf");
+
+    } catch (e) {
+        console.error(e);
+        alert('An error occurred while saving the PDF.');
+    } finally {
+        saveBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Save & Download';
+        saveBtn.disabled = false;
+    }
+});
+
+function download(data, filename, type) {
+    const blob = new Blob([data], { type: type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}

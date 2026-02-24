@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SounnyPDF Editor</title>
+    <meta name="description" content="A simple, professional in-browser PDF editor to type over PDFs and save them.">
+    <!-- Red and white modern theme styles -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- pdf.js for rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- pdf-lib for modifying -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+</head>
+
+<body>
+    <header class="navbar">
+        <div class="logo">Sounny<span>PDF</span></div>
+        <div class="actions">
+            <!-- Instructions and Tools -->
+            <span class="instruction-text" id="instructionText">Upload a PDF to begin</span>
+            <button id="addTextBtn" class="btn secondary hidden" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                    <line x1="9" y1="20" x2="15" y2="20"></line>
+                    <line x1="12" y1="4" x2="12" y2="20"></line>
+                </svg>
+                Type Text
+            </button>
+            <button id="addSignatureBtn" class="btn secondary hidden" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                </svg>
+                Sign
+            </button>
+            <button id="saveBtn" class="btn primary hidden" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                Save
+            </button>
+        </div>
+    </header>
+
+    <main id="main">
+        <!-- Signature Modal -->
+        <div id="signatureModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Draw Your Signature</h3>
+                    <button id="closeModalBtn" class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <canvas id="signatureCanvas" width="400" height="200"></canvas>
+                </div>
+                <div class="modal-footer">
+                    <button id="clearSignatureBtn" class="btn secondary">Clear</button>
+                    <button id="insertSignatureBtn" class="btn primary">Insert Signature</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="uploadArea" class="upload-area">
+            <input type="file" id="fileInput" accept="application/pdf" style="display: none;">
+            <div class="upload-content">
+                <div class="icon-circle">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                </div>
+                <h2>Upload your Document</h2>
+                <p>Drag and drop a PDF file here or click to browse.</p>
+                <p class="subtext">Everything is processed locally in your browser.</p>
+            </div>
+        </div>
+
+        <div id="pdfContainer" class="pdf-container hidden">
+            <!-- PDF pages will be appended here dynamically -->
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
