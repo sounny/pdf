@@ -253,11 +253,16 @@ function addSignatureToPage(imgData) {
         sigDiv.remove();
     };
 
+    const resizer = document.createElement('div');
+    resizer.className = 'img-resizer';
+
     sigDiv.appendChild(img);
     sigDiv.appendChild(deleteBtn);
+    sigDiv.appendChild(resizer);
     targetPage.appendChild(sigDiv);
 
     makeDraggable(sigDiv, targetPage);
+    makeResizable(sigDiv, img, resizer);
 
 
     document.addEventListener('click', (e) => {
@@ -319,6 +324,35 @@ function makeDraggable(element, container) {
         isDragging = false;
         document.removeEventListener('mousemove', drag);
         document.removeEventListener('mouseup', dragEnd);
+    }
+}
+
+function makeResizable(wrapper, img, resizer) {
+    let isResizing = false;
+    let startY, startHeight;
+
+    resizer.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = img.getBoundingClientRect().height;
+
+        document.addEventListener('mousemove', resize);
+        document.addEventListener('mouseup', stopResize);
+    });
+
+    function resize(e) {
+        if (!isResizing) return;
+        const dy = e.clientY - startY;
+        const newHeight = Math.max(20, startHeight + dy);
+        img.style.height = newHeight + 'px';
+    }
+
+    function stopResize() {
+        isResizing = false;
+        document.removeEventListener('mousemove', resize);
+        document.removeEventListener('mouseup', stopResize);
     }
 }
 
