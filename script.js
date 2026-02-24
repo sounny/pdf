@@ -51,6 +51,7 @@ async function handleFile(file) {
 
     addTextBtn.classList.remove('hidden');
     addTextBtn.disabled = false;
+    document.getElementById('textToolbar').classList.remove('hidden');
     addSignatureBtn.classList.remove('hidden');
     addSignatureBtn.disabled = false;
     saveBtn.classList.remove('hidden');
@@ -119,36 +120,78 @@ addTextBtn.addEventListener('click', () => {
     const targetPage = getVisiblePage();
     if (!targetPage) return;
 
-    const textDiv = document.createElement('div');
-    textDiv.className = 'draggable-text active';
-    textDiv.contentEditable = true;
-    textDiv.innerText = 'Type here';
-    textDiv.style.left = '50px';
-    textDiv.style.top = '50px';
-    // Style adjustments for cleaner multiline
-    textDiv.style.whiteSpace = 'pre-wrap';
-    textDiv.style.wordBreak = 'break-word';
-    textDiv.style.lineHeight = '1.2';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'draggable-text active';
+    wrapper.style.left = '50px';
+    wrapper.style.top = '50px';
+
+    const textContent = document.createElement('div');
+    textContent.className = 'text-content';
+    textContent.innerText = 'Double-click to edit';
+    textContent.style.whiteSpace = 'pre-wrap';
+    textContent.style.wordBreak = 'break-word';
+    textContent.style.lineHeight = '1.2';
+    textContent.style.outline = 'none';
+    textContent.style.minWidth = '50px';
+    textContent.style.cursor = 'text';
 
     const deleteBtn = document.createElement('div');
     deleteBtn.className = 'text-delete-btn';
     deleteBtn.innerHTML = '×';
-    deleteBtn.contentEditable = false;
     deleteBtn.onclick = (e) => {
         e.stopPropagation(); // Avoid triggering any outside click event
-        textDiv.remove();
+        wrapper.remove();
     };
 
-    textDiv.appendChild(deleteBtn);
-    targetPage.appendChild(textDiv);
+    wrapper.appendChild(textContent);
+    wrapper.appendChild(deleteBtn);
+    targetPage.appendChild(wrapper);
 
-    makeDraggable(textDiv, targetPage);
-    textDiv.focus();
+    makeDraggable(wrapper, targetPage);
 
-    document.execCommand('selectAll', false, null);
+    wrapper.addEventListener('dblclick', () => {
+        textContent.contentEditable = true;
+        textContent.focus();
+        document.execCommand('selectAll', false, null);
+    });
 
-    textDiv.addEventListener('focus', () => textDiv.classList.add('active'));
-    textDiv.addEventListener('blur', () => textDiv.classList.remove('active'));
+    wrapper.addEventListener('mousedown', () => {
+        document.querySelectorAll('.draggable-text, .draggable-signature').forEach(el => el.classList.remove('active'));
+        wrapper.classList.add('active');
+    });
+
+    textContent.addEventListener('blur', () => {
+        textContent.contentEditable = false;
+        if (textContent.innerText.trim() === '') {
+            textContent.innerText = 'Double-click to edit';
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!wrapper.contains(e.target) && e.target.id !== 'addTextBtn' && e.target.id !== 'btnDecreaseText' && e.target.id !== 'btnIncreaseText') {
+            wrapper.classList.remove('active');
+        }
+    });
+});
+
+// Font size functionality
+const btnIncreaseText = document.getElementById('btnIncreaseText');
+const btnDecreaseText = document.getElementById('btnDecreaseText');
+
+btnIncreaseText.addEventListener('click', () => {
+    const activeText = document.querySelector('.draggable-text.active .text-content');
+    if (activeText) {
+        let currentSize = parseInt(window.getComputedStyle(activeText).fontSize);
+        activeText.style.fontSize = (currentSize + 2) + 'px';
+    }
+});
+
+btnDecreaseText.addEventListener('click', () => {
+    const activeText = document.querySelector('.draggable-text.active .text-content');
+    if (activeText) {
+        let currentSize = parseInt(window.getComputedStyle(activeText).fontSize);
+        activeText.style.fontSize = Math.max(8, currentSize - 2) + 'px';
+    }
 });
 
 // Signature Drag Functionality
@@ -201,7 +244,7 @@ function makeDraggable(element, container) {
     function dragStart(e) {
         if (e.target.classList.contains('text-delete-btn')) return;
 
-        if (element.contentEditable === "true" && document.activeElement === element) {
+        if (e.target.isContentEditable) {
             return;
         }
 
@@ -364,9 +407,14 @@ saveBtn.addEventListener('click', async () => {
     saveBtn.disabled = true;
 
     try {
-        const { PDFDocument, rgb } = PDFLib;
-        const pdfDoc = await PDFDocument.load(currentPdfBytes);
+        const { PDFDocument, rgb } = window.PDFLib;
+        const pdfDoc = await PDFDocument.load(currentPdfBytes, {
+            ignoreEncryption: true
+        });
         const pages = pdfDoc.getPages();
+
+        // ... rest of saving code to remain unchanged except what is above
+
 
         const wrappers = document.querySelectorAll('.pdf-page-wrapper');
 
@@ -385,18 +433,26 @@ saveBtn.addEventListener('click', async () => {
 
             // Process Texts
             const texts = wrapper.querySelectorAll('.draggable-text');
-            texts.forEach(tf => {
-                const textContent = extractTextSafely(tf).trim();
-                if (!textContent) return;
+            texts.forEach(wrapperEl => {
+                const textContentEl = wrapperEl.querySelector('.text-content');
+                if (!textContentEl) return;
 
-                const left = parseFloat(tf.style.left) || 0;
-                const top = parseFloat(tf.style.top) || 0;
+                const textContent = extractTextSafely(wrapperEl).trim();
+                if (!textContent || textContent === 'Double-click to edit') return;
+
+                const left = parseFloat(wrapperEl.style.left) || 0;
+                const top = parseFloat(wrapperEl.style.top) || 0;
 
                 // HTML mapped top to PDF (PDF y=0 is bottom)
                 const pdfY_top = ((containerHeight - top) / containerHeight) * pdfOriginalHeight;
                 const pdfX = (left / containerWidth) * pdfOriginalWidth;
 
-                const fontSize = 14;
+                // Extract custom font size if present
+                let fontSize = 14; // Default
+                if (textContentEl.style.fontSize) {
+                    fontSize = parseInt(textContentEl.style.fontSize);
+                }
+
                 const pdfFontSize = (fontSize / pData.scale) * 1.25;
                 const lineHeight = pdfFontSize * 1.2;
 
