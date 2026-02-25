@@ -19,6 +19,9 @@ During this recent session, the agent addressed the following upgrades to this p
 *   Added an SVG mobile hamburger `actionsMenu` dropdown in `style.css` so tools no longer squish or bleed offscreen on mobile formats.
 *   Cleaned and refactored the design: Upgraded the central `H1` upload screen with a customized UI tag line `"SounnyPDF Form Filler WebApp"`, generated and embedded a brand new vector `sounnypdf_icon.png` application icon logo, linked the internal Sounny repo in the footer, and adjusted UI element button visibility logic.
 *   **Color Picker Toolbar**: Added a new toolbar feature allowing users to change the color of text and marker symbols. The UI consists of an 8-hex-color palette. The `script.js` logic applies the `currentColor` state to actively selected HTML DOM elements, and the `pdf-lib` save function was overhauled to dynamically extract the `element.style.color` values and parse them to `rgb()` format before rendering the final layer so that the downloaded PDF correctly persists the custom colors.
+*   **Zoom & Annotation Preservation Fix**: Fixed a critical bug where zooming wiped out all user-added text and signatures. The system now caches annotations, re-renders the PDF at the new scale, and then re-applies the annotations with proportional coordinate and font-size scaling.
+*   **Dynamic Zoom Calculations**: Rewrote "Fit Width" and "Fit Page" to dynamically recalculate based on the current viewport and window dimensions instead of using stale initial values.
+*   **Toolbar Upload Button**: Replaced the static instruction text with a functional "Upload PDF" button in the navbar for easier workspace management.
 
 ## Known Architecture Implementation Details
 Because standard Helvetica font files utilized by `pdf-lib` do not support drawing Emoji characters native to Windows/MacOS environments onto raw PDFs, the tool's character mapping was refactored. The script now dynamically swaps between generic Helvetica fonts and specialized `ZapfDingbats` encoding layers based entirely on whether the specific character being generated matches `['✔', '✘', '●']`.
@@ -26,3 +29,10 @@ Because standard Helvetica font files utilized by `pdf-lib` do not support drawi
 If a future update introduces more symbols, please remember to adjust the `script.js` > `pdfPage.drawText()` `fontToUse` dictionary so you do not encounter `"WinAnsi cannot encode <char>"` hex-conversion crashes during the raw buffer file export function.
 
 When extracting the color from HTML elements for `pdf-lib` to save the PDF, `element.style.color` returns strings in various formats (e.g., `#D32F2F` or `rgb(211, 47, 47)`). The logic uses regex matching to parse these formats into fractional RGB values between `0` and `1` (which `pdf-lib` requires).
+
+The **Zoom Preservation** logic in `renderPDF` works by:
+1. Scanning all `.pdf-page-wrapper` elements for `.draggable-text` and `.draggable-signature` before clearing the page.
+2. Storing clones of these nodes along with their original container widths.
+3. After the new page is rendered, calculating a `scaleRatio` (`newWidth / oldWidth`).
+4. Re-scaling `top`, `left`, `font-size` (for text), and `height` (for images) by the ratio before re-appending them to the new wrappers.
+5. Re-binding all event listeners (draggable, delete, dblclick, color changes) to the new nodes.
