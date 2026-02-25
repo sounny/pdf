@@ -24,7 +24,10 @@ During this recent session, the agent addressed the following upgrades to this p
 *   **Toolbar Upload Button**: Replaced the static instruction text with a functional "Upload PDF" button in the navbar for easier workspace management.
 *   **Text Save Bug Fix**: Fixed critical bug where paragraphs went off-page in saved PDFs. Root cause was a 1.25x font multiplier inflating PDF font size beyond what was visible on screen. Also fixed `extractTextSafely` which was reading from the wrapper div (accidentally including delete button text) instead of the `.text-content` child.
 *   **Drawable Text Box Tool**: Added a new "Draw Text Box" button that toggles crosshair draw mode. Users click and drag to create a text box of any size. Text boxes are resizable (via corner handle like signatures) and support all existing features (color, font size, dragging, editing, saving).
-*   **General Bug Fixes**: Updated all active-element selectors to include `.draggable-textbox` alongside `.draggable-text` and `.draggable-signature`. Fixed outside-click exclusion lists. Extracted `parseColorToRgb()` as a reusable helper in the save function. Added `maxWidth` constraint to `drawText()` for textboxes so text wraps within the box boundaries in saved PDFs.
+*   **Undo/Redo System**: Implemented a comprehensive history stack that tracks "add", "remove", and "move" (drag) actions with a 50-entry limit. Included UI buttons and standard keyboard shortcuts (Ctrl+Z / Ctrl+Y).
+*   **Highlight / Annotation Tool**: Added a "Highlight" tool that allows users to draw semi-transparent rectangles over the PDF. Uses `mix-blend-mode: multiply` for a realistic highlighter effect on screen and `pdfPage.drawRectangle` with opacity for the saved PDF.
+*   **Collapsible Color Picker**: Overhauled the color picker UI into a collapsible dropdown panel to save vertical toolbar space. The toggle button displays the currently selected color.
+*   **General Bug Fixes**: Updated all active-element selectors and zoom preservation logic to include `.draggable-textbox` and `.draggable-highlight`. Fixed outside-click exclusion lists. Extracted `parseColorToRgb()` as a reusable helper in the save function. Added `maxWidth` constraint to `drawText()` for textboxes.
 
 ## Known Architecture Implementation Details
 Because standard Helvetica font files utilized by `pdf-lib` do not support drawing Emoji characters native to Windows/MacOS environments onto raw PDFs, the tool's character mapping was refactored. The script now dynamically swaps between generic Helvetica fonts and specialized `ZapfDingbats` encoding layers based entirely on whether the specific character being generated matches `['✔', '✘', '●']`.
@@ -34,7 +37,7 @@ If a future update introduces more symbols, please remember to adjust the `scrip
 When extracting the color from HTML elements for `pdf-lib` to save the PDF, `element.style.color` returns strings in various formats (e.g., `#D32F2F` or `rgb(211, 47, 47)`). The logic uses regex matching to parse these formats into fractional RGB values between `0` and `1` (which `pdf-lib` requires).
 
 The **Zoom Preservation** logic in `renderPDF` works by:
-1. Scanning all `.pdf-page-wrapper` elements for `.draggable-text` and `.draggable-signature` before clearing the page.
+1. Scanning all `.pdf-page-wrapper` elements for `.draggable-text`, `.draggable-signature`, `.draggable-textbox`, and `.draggable-highlight` before clearing the page.
 2. Storing clones of these nodes along with their original container widths.
 3. After the new page is rendered, calculating a `scaleRatio` (`newWidth / oldWidth`).
 4. Re-scaling `top`, `left`, `font-size` (for text), and `height` (for images) by the ratio before re-appending them to the new wrappers.
