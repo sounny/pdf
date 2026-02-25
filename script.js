@@ -16,6 +16,7 @@ let currentColor = '#000000';
 // UI Elements
 const uploadArea = document.getElementById('uploadArea');
 const fileInput = document.getElementById('fileInput');
+const navUploadBtn = document.getElementById('navUploadBtn');
 const pdfContainer = document.getElementById('pdfContainer');
 const addTextBtn = document.getElementById('addTextBtn');
 const addSignatureBtn = document.getElementById('addSignatureBtn');
@@ -33,6 +34,7 @@ uploadArea.addEventListener('drop', (e) => {
         handleFile(e.dataTransfer.files[0]);
     }
 });
+navUploadBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', (e) => {
     if (e.target.files.length) {
         handleFile(e.target.files[0]);
@@ -64,12 +66,46 @@ async function handleFile(file) {
     addSignatureBtn.disabled = false;
     saveBtn.classList.remove('hidden');
     saveBtn.disabled = false;
-    instructionText.innerText = 'Add text/signature and Drag to position';
+    navUploadBtn.classList.add('hidden');
+    instructionText.classList.remove('hidden');
 
     renderPDF(currentPdfBytes);
 }
 
 async function renderPDF(pdfBytes, renderScale = null) {
+    // 1) CACHE EXISTING ANNOTATIONS BEFORE CLEARING DOM
+    const savedAnnotations = [];
+    document.querySelectorAll('.pdf-page-wrapper').forEach(wrapper => {
+        const pageNum = parseInt(wrapper.dataset.pageNumber, 10);
+        const oldContainerWidth = wrapper.offsetWidth;
+
+        // Cache texts
+        wrapper.querySelectorAll('.draggable-text').forEach(textNode => {
+            savedAnnotations.push({
+                type: 'text',
+                pageNum: pageNum,
+                node: textNode.cloneNode(true), // Deep clone the HTML
+                oldLeft: parseFloat(textNode.style.left) || 0,
+                oldTop: parseFloat(textNode.style.top) || 0,
+                oldContainerWidth: oldContainerWidth
+            });
+        });
+
+        // Cache signatures
+        wrapper.querySelectorAll('.draggable-signature').forEach(sigNode => {
+            const img = sigNode.querySelector('img');
+            savedAnnotations.push({
+                type: 'signature',
+                pageNum: pageNum,
+                node: sigNode.cloneNode(true),
+                oldLeft: parseFloat(sigNode.style.left) || 0,
+                oldTop: parseFloat(sigNode.style.top) || 0,
+                oldContainerWidth: oldContainerWidth,
+                oldHeight: img ? parseFloat(img.style.height || img.getBoundingClientRect().height) : 60
+            });
+        });
+    });
+
     pdfContainer.innerHTML = '';
     pagesData = [];
 
@@ -135,6 +171,95 @@ async function renderPDF(pdfBytes, renderScale = null) {
         };
         await page.render(renderContext).promise;
     }
+
+    // 2) RESTORE ANNOTATIONS WITH PROPORTIONAL SCALING
+    const newWrappers = document.querySelectorAll('.pdf-page-wrapper');
+    savedAnnotations.forEach(anno => {
+        // Find the new wrapper for this page
+        let targetWrapper = null;
+        for (let i = 0; i < newWrappers.length; i++) {
+            if (parseInt(newWrappers[i].dataset.pageNumber, 10) === anno.pageNum) {
+                targetWrapper = newWrappers[i];
+                break;
+            }
+        }
+        if (!targetWrapper) return;
+
+        const newContainerWidth = targetWrapper.offsetWidth;
+        const scaleRatio = newContainerWidth / anno.oldContainerWidth;
+
+        // Scale coordinates
+        const newLeft = anno.oldLeft * scaleRatio;
+        const newTop = anno.oldTop * scaleRatio;
+
+        const freshNode = anno.node;
+        freshNode.style.left = newLeft + 'px';
+        freshNode.style.top = newTop + 'px';
+        freshNode.classList.remove('active'); // Start deselected
+
+        if (anno.type === 'text') {
+            const txtContent = freshNode.querySelector('.text-content');
+            if (txtContent && txtContent.style.fontSize) {
+                const oldSize = parseFloat(txtContent.style.fontSize);
+                txtContent.style.fontSize = (oldSize * scaleRatio) + 'px';
+            }
+            targetWrapper.appendChild(freshNode);
+            makeDraggable(freshNode, targetWrapper);
+
+            // Reattach double click listener
+            if (txtContent.style.cursor === 'text') {
+                freshNode.addEventListener('dblclick', () => {
+                    txtContent.contentEditable = true;
+                    txtContent.focus();
+                    document.execCommand('selectAll', false, null);
+                });
+                txtContent.addEventListener('blur', () => {
+                    txtContent.contentEditable = false;
+                });
+            }
+
+            freshNode.addEventListener('mousedown', () => {
+                document.querySelectorAll('.draggable-text, .draggable-signature').forEach(el => el.classList.remove('active'));
+                freshNode.classList.add('active');
+            });
+
+            // Rebind delete button
+            const delBtn = freshNode.querySelector('.text-delete-btn');
+            if (delBtn) {
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    freshNode.remove();
+                };
+            }
+
+        } else if (anno.type === 'signature') {
+            const img = freshNode.querySelector('img');
+            if (img) {
+                img.style.height = (anno.oldHeight * scaleRatio) + 'px';
+            }
+            targetWrapper.appendChild(freshNode);
+
+            const resizer = freshNode.querySelector('.img-resizer');
+            makeDraggable(freshNode, targetWrapper);
+            if (img && resizer) makeResizable(freshNode, img, resizer);
+
+            freshNode.addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.querySelectorAll('.draggable-signature').forEach(el => el.classList.remove('active'));
+                freshNode.classList.add('active');
+            });
+
+            // Rebind delete button
+            const delBtn = freshNode.querySelector('.text-delete-btn');
+            if (delBtn) {
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    freshNode.remove();
+                };
+            }
+        }
+    });
+
 }
 
 // Zoom Controls
@@ -145,10 +270,29 @@ document.getElementById('zoomOutBtn').addEventListener('click', () => {
     if (currentScale > 0.5) renderPDF(currentPdfBytes, currentScale - 0.25);
 });
 document.getElementById('zoomFitWidthBtn').addEventListener('click', () => {
-    renderPDF(currentPdfBytes, widthFitScale);
+    // Calculate Fit Width dynamically based on current container size
+    if (pagesData.length > 0) {
+        const availableWidth = pdfContainer.clientWidth - 40;
+        const unscaledWidth = pagesData[0].originalWidth;
+        widthFitScale = availableWidth / unscaledWidth;
+        renderPDF(currentPdfBytes, widthFitScale);
+    }
 });
 document.getElementById('zoomFitPageBtn').addEventListener('click', () => {
-    renderPDF(currentPdfBytes, defaultScale);
+    // Calculate Fit Page dynamically based on current container and window size
+    if (pagesData.length > 0) {
+        const availableHeight = window.innerHeight - document.querySelector('.navbar').offsetHeight - 40;
+        const availableWidth = pdfContainer.clientWidth - 40;
+        const unscaledWidth = pagesData[0].originalWidth;
+        const unscaledHeight = pagesData[0].originalHeight;
+
+        let scaleFitPage = availableHeight / unscaledHeight;
+        if (unscaledWidth * scaleFitPage > availableWidth) {
+            scaleFitPage = availableWidth / unscaledWidth;
+        }
+        defaultScale = Math.max(0.5, Math.min(scaleFitPage, 3.0));
+        renderPDF(currentPdfBytes, defaultScale);
+    }
 });
 
 function getVisiblePage() {

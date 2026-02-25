@@ -35,7 +35,15 @@
         </button>
         <div class="actions" id="actionsMenu">
             <!-- Instructions and Tools -->
-            <span class="instruction-text" id="instructionText">Upload a PDF to begin</span>
+            <button id="navUploadBtn" class="btn primary" style="padding: 0.5rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                Upload PDF
+            </button>
+            <span class="instruction-text hidden" id="instructionText">Add text/signature and Drag to position</span>
 
             <!-- Zoom Toolbar -->
             <div id="zoomGroup" class="hidden"
