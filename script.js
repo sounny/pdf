@@ -13,6 +13,59 @@ let defaultScale = 1.0;
 let widthFitScale = 1.0;
 let currentColor = '#000000';
 
+// Undo/Redo History
+const historyStack = [];
+const redoStack = [];
+const MAX_HISTORY = 50;
+
+function pushHistory(action) {
+    historyStack.push(action);
+    if (historyStack.length > MAX_HISTORY) historyStack.shift();
+    redoStack.length = 0; // clear redo on new action
+    updateUndoRedoButtons();
+}
+
+function updateUndoRedoButtons() {
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+    if (undoBtn) undoBtn.disabled = historyStack.length === 0;
+    if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+}
+
+function performUndo() {
+    if (historyStack.length === 0) return;
+    const action = historyStack.pop();
+    if (action.type === 'add') {
+        action.node.remove();
+        redoStack.push(action);
+    } else if (action.type === 'remove') {
+        action.parent.appendChild(action.node);
+        redoStack.push(action);
+    } else if (action.type === 'move') {
+        action.node.style.left = action.oldLeft + 'px';
+        action.node.style.top = action.oldTop + 'px';
+        redoStack.push(action);
+    }
+    updateUndoRedoButtons();
+}
+
+function performRedo() {
+    if (redoStack.length === 0) return;
+    const action = redoStack.pop();
+    if (action.type === 'add') {
+        action.parent.appendChild(action.node);
+        historyStack.push(action);
+    } else if (action.type === 'remove') {
+        action.node.remove();
+        historyStack.push(action);
+    } else if (action.type === 'move') {
+        action.node.style.left = action.newLeft + 'px';
+        action.node.style.top = action.newTop + 'px';
+        historyStack.push(action);
+    }
+    updateUndoRedoButtons();
+}
+
 // UI Elements
 const uploadArea = document.getElementById('uploadArea');
 const fileInput = document.getElementById('fileInput');
@@ -68,6 +121,10 @@ async function handleFile(file) {
     saveBtn.classList.remove('hidden');
     saveBtn.disabled = false;
     navUploadBtn.classList.add('hidden');
+    document.getElementById('highlightBtn').classList.remove('hidden');
+    document.getElementById('highlightBtn').disabled = false;
+    document.getElementById('undoRedoGroup').classList.remove('hidden');
+    updateUndoRedoButtons();
 
     renderPDF(currentPdfBytes);
 }
@@ -101,6 +158,21 @@ async function renderPDF(pdfBytes, renderScale = null) {
                 oldTop: parseFloat(tbNode.style.top) || 0,
                 oldWidth: parseFloat(tbNode.style.width) || tbNode.offsetWidth,
                 oldHeight: parseFloat(tbNode.style.height) || tbNode.offsetHeight,
+                oldContainerWidth: oldContainerWidth
+            });
+        });
+
+        // Cache highlights
+        wrapper.querySelectorAll('.draggable-highlight').forEach(hlNode => {
+            savedAnnotations.push({
+                type: 'highlight',
+                pageNum: pageNum,
+                node: hlNode.cloneNode(true),
+                oldLeft: parseFloat(hlNode.style.left) || 0,
+                oldTop: parseFloat(hlNode.style.top) || 0,
+                oldWidth: parseFloat(hlNode.style.width) || hlNode.offsetWidth,
+                oldHeight: parseFloat(hlNode.style.height) || hlNode.offsetHeight,
+                bgColor: hlNode.style.backgroundColor,
                 oldContainerWidth: oldContainerWidth
             });
         });
@@ -278,6 +350,26 @@ async function renderPDF(pdfBytes, renderScale = null) {
                 };
             }
 
+        } else if (anno.type === 'highlight') {
+            freshNode.style.width = ((anno.oldWidth || 100) * scaleRatio) + 'px';
+            freshNode.style.height = ((anno.oldHeight || 30) * scaleRatio) + 'px';
+            if (anno.bgColor) freshNode.style.backgroundColor = anno.bgColor;
+            targetWrapper.appendChild(freshNode);
+            makeDraggable(freshNode, targetWrapper);
+            const hlResizer = freshNode.querySelector('.highlight-resizer');
+            if (hlResizer) makeHighlightResizable(freshNode, hlResizer);
+            freshNode.addEventListener('mousedown', () => {
+                document.querySelectorAll('.draggable-text, .draggable-signature, .draggable-textbox, .draggable-highlight').forEach(el => el.classList.remove('active'));
+                freshNode.classList.add('active');
+            });
+            const hlDelBtn = freshNode.querySelector('.text-delete-btn');
+            if (hlDelBtn) {
+                hlDelBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    freshNode.remove();
+                };
+            }
+
         } else if (anno.type === 'signature') {
             const img = freshNode.querySelector('img');
             if (img) {
@@ -386,13 +478,17 @@ function addTextOverlay(defaultText, isEditable = true) {
     deleteBtn.className = 'text-delete-btn';
     deleteBtn.innerHTML = '×';
     deleteBtn.onclick = (e) => {
-        e.stopPropagation(); // Avoid triggering any outside click event
+        e.stopPropagation();
+        pushHistory({ type: 'remove', node: wrapper, parent: targetPage });
         wrapper.remove();
     };
 
     wrapper.appendChild(textContent);
     wrapper.appendChild(deleteBtn);
     targetPage.appendChild(wrapper);
+
+    // Track in undo history
+    pushHistory({ type: 'add', node: wrapper, parent: targetPage });
 
     makeDraggable(wrapper, targetPage);
 
@@ -412,7 +508,7 @@ function addTextOverlay(defaultText, isEditable = true) {
     }
 
     wrapper.addEventListener('mousedown', () => {
-        document.querySelectorAll('.draggable-text, .draggable-signature, .draggable-textbox').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.draggable-text, .draggable-signature, .draggable-textbox, .draggable-highlight').forEach(el => el.classList.remove('active'));
         wrapper.classList.add('active');
     });
 
@@ -420,6 +516,7 @@ function addTextOverlay(defaultText, isEditable = true) {
         if (!wrapper.contains(e.target) &&
             !e.target.closest('#addTextBtn') &&
             !e.target.closest('#drawTextBoxBtn') &&
+            !e.target.closest('#highlightBtn') &&
             !e.target.closest('#symbolsGroup') &&
             !e.target.closest('#textToolbar') &&
             !e.target.closest('#colorPickerGroup')) {
@@ -524,7 +621,8 @@ pdfContainer.addEventListener('mousedown', (e) => {
             return;
         }
 
-        createTextBox(drawWrapper, finalX, finalY, finalW, finalH);
+        const newBox = createTextBox(drawWrapper, finalX, finalY, finalW, finalH);
+        pushHistory({ type: 'add', node: newBox, parent: drawWrapper });
         drawWrapper = null;
 
         // Turn off draw mode after creating
@@ -559,6 +657,7 @@ function createTextBox(targetPage, x, y, w, h) {
     deleteBtn.innerHTML = '×';
     deleteBtn.onclick = (e) => {
         e.stopPropagation();
+        pushHistory({ type: 'remove', node: box, parent: targetPage });
         box.remove();
     };
 
@@ -588,13 +687,14 @@ function createTextBox(targetPage, x, y, w, h) {
 
     box.addEventListener('mousedown', (e) => {
         if (e.target.classList.contains('textbox-resizer')) return;
-        document.querySelectorAll('.draggable-text, .draggable-signature, .draggable-textbox').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.draggable-text, .draggable-signature, .draggable-textbox, .draggable-highlight').forEach(el => el.classList.remove('active'));
         box.classList.add('active');
     });
 
     document.addEventListener('click', (e) => {
         if (!box.contains(e.target) &&
             !e.target.closest('#drawTextBoxBtn') &&
+            !e.target.closest('#highlightBtn') &&
             !e.target.closest('#textToolbar') &&
             !e.target.closest('#colorPickerGroup')) {
             box.classList.remove('active');
@@ -627,6 +727,179 @@ function makeTextboxResizable(box, resizer) {
         const dy = e.clientY - startY;
         box.style.width = Math.max(40, startW + dx) + 'px';
         box.style.height = Math.max(20, startH + dy) + 'px';
+    }
+
+    function stopResize() {
+        isResizing = false;
+        document.removeEventListener('mousemove', resize);
+        document.removeEventListener('mouseup', stopResize);
+    }
+}
+
+// ===== HIGHLIGHT DRAW TOOL =====
+let isDrawingHighlight = false;
+let hlStartX = 0, hlStartY = 0;
+let hlWrapper = null;
+let hlPreview = null;
+
+const highlightBtn = document.getElementById('highlightBtn');
+highlightBtn.addEventListener('click', () => {
+    isDrawingHighlight = !isDrawingHighlight;
+    highlightBtn.classList.toggle('highlighting-active', isDrawingHighlight);
+    document.querySelectorAll('.pdf-page-wrapper').forEach(w => {
+        w.classList.toggle('highlight-mode', isDrawingHighlight);
+    });
+    // Turn off textbox draw mode if on
+    if (isDrawingHighlight && isDrawingTextBox) {
+        isDrawingTextBox = false;
+        drawTextBoxBtn.classList.remove('drawing-active');
+        document.querySelectorAll('.pdf-page-wrapper').forEach(w => w.classList.remove('draw-mode'));
+    }
+});
+
+pdfContainer.addEventListener('mousedown', (e) => {
+    if (!isDrawingHighlight) return;
+    const wrapper = e.target.closest('.pdf-page-wrapper');
+    if (!wrapper) return;
+    if (e.target.closest('.draggable-text, .draggable-textbox, .draggable-signature, .draggable-highlight')) return;
+
+    e.preventDefault();
+    const wrapperRect = wrapper.getBoundingClientRect();
+    hlStartX = e.clientX - wrapperRect.left;
+    hlStartY = e.clientY - wrapperRect.top;
+    hlWrapper = wrapper;
+
+    hlPreview = document.createElement('div');
+    hlPreview.style.position = 'absolute';
+    hlPreview.style.left = hlStartX + 'px';
+    hlPreview.style.top = hlStartY + 'px';
+    hlPreview.style.width = '0px';
+    hlPreview.style.height = '0px';
+    hlPreview.style.background = 'rgba(255,235,59,0.35)';
+    hlPreview.style.zIndex = '200';
+    hlPreview.style.pointerEvents = 'none';
+    hlPreview.style.borderRadius = '2px';
+    wrapper.appendChild(hlPreview);
+
+    function onMouseMove(ev) {
+        if (!hlPreview) return;
+        const curX = ev.clientX - wrapperRect.left;
+        const curY = ev.clientY - wrapperRect.top;
+        hlPreview.style.left = Math.min(hlStartX, curX) + 'px';
+        hlPreview.style.top = Math.min(hlStartY, curY) + 'px';
+        hlPreview.style.width = Math.abs(curX - hlStartX) + 'px';
+        hlPreview.style.height = Math.abs(curY - hlStartY) + 'px';
+    }
+
+    function onMouseUp(ev) {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        if (!hlPreview || !hlWrapper) return;
+
+        const curX = ev.clientX - wrapperRect.left;
+        const curY = ev.clientY - wrapperRect.top;
+        const finalX = Math.min(hlStartX, curX);
+        const finalY = Math.min(hlStartY, curY);
+        const finalW = Math.abs(curX - hlStartX);
+        const finalH = Math.abs(curY - hlStartY);
+
+        hlPreview.remove();
+        hlPreview = null;
+
+        if (finalW < 10 || finalH < 5) {
+            hlWrapper = null;
+            return;
+        }
+
+        const hl = createHighlight(hlWrapper, finalX, finalY, finalW, finalH);
+        pushHistory({ type: 'add', node: hl, parent: hlWrapper });
+        hlWrapper = null;
+
+        // Turn off highlight mode after creating
+        isDrawingHighlight = false;
+        highlightBtn.classList.remove('highlighting-active');
+        document.querySelectorAll('.pdf-page-wrapper').forEach(w => {
+            w.classList.remove('highlight-mode');
+        });
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+});
+
+function createHighlight(targetPage, x, y, w, h) {
+    // Determine highlight color from currentColor
+    let hlColor = 'rgba(255,235,59,0.35)'; // default yellow
+    if (currentColor && currentColor !== '#000000') {
+        const hex = currentColor.replace('#', '');
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        hlColor = `rgba(${r},${g},${b},0.35)`;
+    }
+
+    const hl = document.createElement('div');
+    hl.className = 'draggable-highlight';
+    hl.style.left = x + 'px';
+    hl.style.top = y + 'px';
+    hl.style.width = w + 'px';
+    hl.style.height = h + 'px';
+    hl.style.backgroundColor = hlColor;
+
+    const deleteBtn = document.createElement('div');
+    deleteBtn.className = 'text-delete-btn';
+    deleteBtn.innerHTML = '\u00d7';
+    deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        pushHistory({ type: 'remove', node: hl, parent: targetPage });
+        hl.remove();
+    };
+
+    const resizer = document.createElement('div');
+    resizer.className = 'highlight-resizer';
+
+    hl.appendChild(deleteBtn);
+    hl.appendChild(resizer);
+    targetPage.appendChild(hl);
+
+    makeDraggable(hl, targetPage);
+    makeHighlightResizable(hl, resizer);
+
+    hl.addEventListener('mousedown', () => {
+        document.querySelectorAll('.draggable-text, .draggable-signature, .draggable-textbox, .draggable-highlight').forEach(el => el.classList.remove('active'));
+        hl.classList.add('active');
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!hl.contains(e.target) && !e.target.closest('#highlightBtn')) {
+            hl.classList.remove('active');
+        }
+    });
+
+    return hl;
+}
+
+function makeHighlightResizable(hl, resizer) {
+    let isResizing = false;
+    let startX, startY, startW, startH;
+
+    resizer.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        isResizing = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startW = hl.offsetWidth;
+        startH = hl.offsetHeight;
+
+        document.addEventListener('mousemove', resize);
+        document.addEventListener('mouseup', stopResize);
+    });
+
+    function resize(e) {
+        if (!isResizing) return;
+        hl.style.width = Math.max(10, startW + (e.clientX - startX)) + 'px';
+        hl.style.height = Math.max(5, startH + (e.clientY - startY)) + 'px';
     }
 
     function stopResize() {
@@ -680,20 +953,55 @@ btnDecreaseText.addEventListener('click', () => {
     }
 });
 
-// Color Picker Functionality
+// Color Picker Functionality — Collapsible Dropdown
+const colorPickerToggleBtn = document.getElementById('colorPickerToggleBtn');
+const colorSwatchDropdown = document.getElementById('colorSwatchDropdown');
+const colorPickerSwatch = document.getElementById('colorPickerSwatch');
+
+colorPickerToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    colorSwatchDropdown.classList.toggle('hidden');
+});
+
+// Close dropdown on outside click
+document.addEventListener('click', (e) => {
+    if (!colorSwatchDropdown.contains(e.target) && !colorPickerToggleBtn.contains(e.target)) {
+        colorSwatchDropdown.classList.add('hidden');
+    }
+});
+
 document.querySelectorAll('.color-swatch').forEach(swatch => {
     swatch.addEventListener('click', () => {
-        // Update active swatch indicator
         document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active-swatch'));
         swatch.classList.add('active-swatch');
         currentColor = swatch.dataset.color;
+
+        // Update the toggle button's swatch preview
+        colorPickerSwatch.style.background = currentColor;
 
         // Apply color to currently active text element
         const activeText = document.querySelector('.draggable-text.active .text-content, .draggable-textbox.active .text-content');
         if (activeText) {
             activeText.style.color = currentColor;
         }
+
+        // Close dropdown after selecting
+        colorSwatchDropdown.classList.add('hidden');
     });
+});
+
+// Undo/Redo button listeners and keyboard shortcuts
+document.getElementById('undoBtn').addEventListener('click', performUndo);
+document.getElementById('redoBtn').addEventListener('click', performRedo);
+
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        performUndo();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        performRedo();
+    }
 });
 
 // Signature Drag Functionality
@@ -786,6 +1094,21 @@ function makeDraggable(element, container) {
     }
 
     function dragEnd() {
+        if (isDragging) {
+            const finalX = element.offsetLeft;
+            const finalY = element.offsetTop;
+            // Only push to history if position actually changed
+            if (finalX !== initialX || finalY !== initialY) {
+                pushHistory({
+                    type: 'move',
+                    node: element,
+                    oldLeft: initialX,
+                    oldTop: initialY,
+                    newLeft: finalX,
+                    newTop: finalY
+                });
+            }
+        }
         isDragging = false;
         document.removeEventListener('mousemove', drag);
         document.removeEventListener('mouseup', dragEnd);
@@ -1080,6 +1403,47 @@ saveBtn.addEventListener('click', async () => {
                     height: pdfH
                 });
             }
+
+            // Process Highlights
+            const highlights = wrapper.querySelectorAll('.draggable-highlight');
+            highlights.forEach(hl => {
+                const left = parseFloat(hl.style.left) || 0;
+                const top = parseFloat(hl.style.top) || 0;
+                const hlWidth = parseFloat(hl.style.width) || hl.offsetWidth;
+                const hlHeight = parseFloat(hl.style.height) || hl.offsetHeight;
+
+                const bottom = containerHeight - (top + hlHeight);
+
+                const pdfX = (left / containerWidth) * pdfOriginalWidth;
+                const pdfY = (bottom / containerHeight) * pdfOriginalHeight;
+                const pdfW = (hlWidth / containerWidth) * pdfOriginalWidth;
+                const pdfH = (hlHeight / containerHeight) * pdfOriginalHeight;
+
+                // Parse the background color
+                let hlRgb = rgb(1, 0.92, 0.23); // default yellow
+                let hlOpacity = 0.35;
+                const bgColor = hl.style.backgroundColor;
+                if (bgColor) {
+                    const rgbMatch = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+                    if (rgbMatch) {
+                        hlRgb = rgb(
+                            parseInt(rgbMatch[1]) / 255,
+                            parseInt(rgbMatch[2]) / 255,
+                            parseInt(rgbMatch[3]) / 255
+                        );
+                        if (rgbMatch[4]) hlOpacity = parseFloat(rgbMatch[4]);
+                    }
+                }
+
+                pdfPage.drawRectangle({
+                    x: pdfX,
+                    y: pdfY,
+                    width: pdfW,
+                    height: pdfH,
+                    color: hlRgb,
+                    opacity: hlOpacity,
+                });
+            });
         }
 
         // Flatten any existing interactive form fields so they don't block the user's overlaid text

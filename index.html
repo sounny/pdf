@@ -109,18 +109,32 @@
                     title="Increase font size">A+</button>
             </div>
 
-            <!-- Color Picker Palette -->
-            <div id="colorPickerGroup" class="hidden"
-                style="display:flex; gap: 0.25rem; align-items: center; border-right: 1px solid var(--border-color); padding-right: 0.5rem; margin-right: 0.25rem;">
-                <button class="color-swatch active-swatch" data-color="#000000" style="background:#000000;"
-                    title="Black"></button>
-                <button class="color-swatch" data-color="#FFFFFF" style="background:#FFFFFF;" title="White"></button>
-                <button class="color-swatch" data-color="#808080" style="background:#808080;" title="Gray"></button>
-                <button class="color-swatch" data-color="#D32F2F" style="background:#D32F2F;" title="Red"></button>
-                <button class="color-swatch" data-color="#1976D2" style="background:#1976D2;" title="Blue"></button>
-                <button class="color-swatch" data-color="#388E3C" style="background:#388E3C;" title="Green"></button>
-                <button class="color-swatch" data-color="#F57C00" style="background:#F57C00;" title="Orange"></button>
-                <button class="color-swatch" data-color="#7B1FA2" style="background:#7B1FA2;" title="Purple"></button>
+            <!-- Collapsible Color Picker -->
+            <div id="colorPickerGroup" class="hidden" style="position: relative; display:flex; align-items: center;">
+                <button id="colorPickerToggleBtn" class="btn secondary"
+                    style="padding: 0.25rem 0.5rem; display:flex; align-items:center; gap:4px;" title="Color Picker">
+                    <span id="colorPickerSwatch"
+                        style="display:inline-block; width:14px; height:14px; border-radius:50%; background:#000000; border:2px solid #ccc;"></span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+                <div id="colorSwatchDropdown" class="color-dropdown hidden">
+                    <button class="color-swatch active-swatch" data-color="#000000" style="background:#000000;"
+                        title="Black"></button>
+                    <button class="color-swatch" data-color="#FFFFFF" style="background:#FFFFFF;"
+                        title="White"></button>
+                    <button class="color-swatch" data-color="#808080" style="background:#808080;" title="Gray"></button>
+                    <button class="color-swatch" data-color="#D32F2F" style="background:#D32F2F;" title="Red"></button>
+                    <button class="color-swatch" data-color="#1976D2" style="background:#1976D2;" title="Blue"></button>
+                    <button class="color-swatch" data-color="#388E3C" style="background:#388E3C;"
+                        title="Green"></button>
+                    <button class="color-swatch" data-color="#F57C00" style="background:#F57C00;"
+                        title="Orange"></button>
+                    <button class="color-swatch" data-color="#7B1FA2" style="background:#7B1FA2;"
+                        title="Purple"></button>
+                </div>
             </div>
 
             <div id="symbolsGroup" class="hidden" style="display:flex; gap: 0.25rem;">
@@ -146,6 +160,16 @@
                 </button>
             </div>
 
+            <!-- Highlight Tool -->
+            <button id="highlightBtn" class="btn secondary hidden" style="padding: 0.5rem;" title="Draw Highlight"
+                disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5l4 4L7 21H3v-4L16.5 3.5z"></path>
+                </svg>
+            </button>
+
             <button id="addSignatureBtn" class="btn secondary hidden" disabled>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -154,6 +178,26 @@
                 </svg>
                 Sign
             </button>
+
+            <!-- Undo/Redo -->
+            <div id="undoRedoGroup" class="hidden"
+                style="display:flex; gap: 0.25rem; align-items: center; border-left: 1px solid var(--border-color); padding-left: 0.5rem; margin-left: 0.25rem;">
+                <button id="undoBtn" class="btn secondary" style="padding: 0.25rem 0.5rem;" title="Undo (Ctrl+Z)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="1 4 1 10 7 10"></polyline>
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                    </svg>
+                </button>
+                <button id="redoBtn" class="btn secondary" style="padding: 0.25rem 0.5rem;" title="Redo (Ctrl+Y)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"></path>
+                    </svg>
+                </button>
+            </div>
+
             <button id="saveBtn" class="btn primary hidden" disabled>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
