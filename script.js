@@ -21,7 +21,6 @@ const pdfContainer = document.getElementById('pdfContainer');
 const addTextBtn = document.getElementById('addTextBtn');
 const addSignatureBtn = document.getElementById('addSignatureBtn');
 const saveBtn = document.getElementById('saveBtn');
-const instructionText = document.getElementById('instructionText');
 
 // Drag and Drop
 uploadArea.addEventListener('click', () => fileInput.click());
@@ -69,7 +68,6 @@ async function handleFile(file) {
     saveBtn.classList.remove('hidden');
     saveBtn.disabled = false;
     navUploadBtn.classList.add('hidden');
-    instructionText.classList.remove('hidden');
 
     renderPDF(currentPdfBytes);
 }
