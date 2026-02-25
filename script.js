@@ -11,6 +11,7 @@ let pdfDocumentObj = null;
 let currentScale = 1.0;
 let defaultScale = 1.0;
 let widthFitScale = 1.0;
+let currentColor = '#000000';
 
 // UI Elements
 const uploadArea = document.getElementById('uploadArea');
@@ -58,6 +59,7 @@ async function handleFile(file) {
     document.getElementById('zoomGroup').classList.remove('hidden');
     document.getElementById('symbolsGroup').classList.remove('hidden');
     document.getElementById('textToolbar').classList.remove('hidden');
+    document.getElementById('colorPickerGroup').classList.remove('hidden');
     addSignatureBtn.classList.remove('hidden');
     addSignatureBtn.disabled = false;
     saveBtn.classList.remove('hidden');
@@ -175,6 +177,7 @@ function addTextOverlay(defaultText, isEditable = true) {
     const textContent = document.createElement('div');
     textContent.className = 'text-content';
     textContent.innerText = defaultText;
+    textContent.style.color = currentColor;
     textContent.style.whiteSpace = 'pre-wrap';
     textContent.style.wordBreak = 'break-word';
     textContent.style.lineHeight = '1.2';
@@ -227,7 +230,8 @@ function addTextOverlay(defaultText, isEditable = true) {
         if (!wrapper.contains(e.target) &&
             !e.target.closest('#addTextBtn') &&
             !e.target.closest('#symbolsGroup') &&
-            !e.target.closest('#textToolbar')) {
+            !e.target.closest('#textToolbar') &&
+            !e.target.closest('#colorPickerGroup')) {
             wrapper.classList.remove('active');
         }
     });
@@ -294,6 +298,22 @@ btnDecreaseText.addEventListener('click', () => {
         let currentSize = parseInt(window.getComputedStyle(activeText).fontSize);
         activeText.style.fontSize = Math.max(8, currentSize - 2) + 'px';
     }
+});
+
+// Color Picker Functionality
+document.querySelectorAll('.color-swatch').forEach(swatch => {
+    swatch.addEventListener('click', () => {
+        // Update active swatch indicator
+        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active-swatch'));
+        swatch.classList.add('active-swatch');
+        currentColor = swatch.dataset.color;
+
+        // Apply color to currently active text element
+        const activeText = document.querySelector('.draggable-text.active .text-content');
+        if (activeText) {
+            activeText.style.color = currentColor;
+        }
+    });
 });
 
 // Signature Drag Functionality
@@ -614,7 +634,30 @@ saveBtn.addEventListener('click', async () => {
                     size: pdfFontSize,
                     lineHeight: lineHeight,
                     font: fontToUse,
-                    color: rgb(0, 0, 0),
+                    color: (() => {
+                        const elColor = textContentEl.style.color;
+                        if (elColor) {
+                            // Parse hex colors like #D32F2F
+                            const hexMatch = elColor.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+                            if (hexMatch) {
+                                return rgb(
+                                    parseInt(hexMatch[1], 16) / 255,
+                                    parseInt(hexMatch[2], 16) / 255,
+                                    parseInt(hexMatch[3], 16) / 255
+                                );
+                            }
+                            // Parse rgb() colors
+                            const rgbMatch = elColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                            if (rgbMatch) {
+                                return rgb(
+                                    parseInt(rgbMatch[1]) / 255,
+                                    parseInt(rgbMatch[2]) / 255,
+                                    parseInt(rgbMatch[3]) / 255
+                                );
+                            }
+                        }
+                        return rgb(0, 0, 0);
+                    })(),
                 });
             });
 
