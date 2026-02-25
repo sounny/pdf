@@ -58,6 +58,8 @@ async function handleFile(file) {
 
     addTextBtn.classList.remove('hidden');
     addTextBtn.disabled = false;
+    document.getElementById('drawTextBoxBtn').classList.remove('hidden');
+    document.getElementById('drawTextBoxBtn').disabled = false;
     document.getElementById('zoomGroup').classList.remove('hidden');
     document.getElementById('symbolsGroup').classList.remove('hidden');
     document.getElementById('textToolbar').classList.remove('hidden');
@@ -84,9 +86,23 @@ async function renderPDF(pdfBytes, renderScale = null) {
             savedAnnotations.push({
                 type: 'text',
                 pageNum: pageNum,
-                node: textNode.cloneNode(true), // Deep clone the HTML
+                node: textNode.cloneNode(true),
                 oldLeft: parseFloat(textNode.style.left) || 0,
                 oldTop: parseFloat(textNode.style.top) || 0,
+                oldContainerWidth: oldContainerWidth
+            });
+        });
+
+        // Cache textboxes
+        wrapper.querySelectorAll('.draggable-textbox').forEach(tbNode => {
+            savedAnnotations.push({
+                type: 'textbox',
+                pageNum: pageNum,
+                node: tbNode.cloneNode(true),
+                oldLeft: parseFloat(tbNode.style.left) || 0,
+                oldTop: parseFloat(tbNode.style.top) || 0,
+                oldWidth: parseFloat(tbNode.style.width) || tbNode.offsetWidth,
+                oldHeight: parseFloat(tbNode.style.height) || tbNode.offsetHeight,
                 oldContainerWidth: oldContainerWidth
             });
         });
@@ -232,6 +248,38 @@ async function renderPDF(pdfBytes, renderScale = null) {
                 };
             }
 
+        } else if (anno.type === 'textbox') {
+            const txtContent = freshNode.querySelector('.text-content');
+            if (txtContent && txtContent.style.fontSize) {
+                const oldSize = parseFloat(txtContent.style.fontSize);
+                txtContent.style.fontSize = (oldSize * scaleRatio) + 'px';
+            }
+            freshNode.style.width = ((anno.oldWidth || 200) * scaleRatio) + 'px';
+            freshNode.style.height = ((anno.oldHeight || 100) * scaleRatio) + 'px';
+            targetWrapper.appendChild(freshNode);
+            makeDraggable(freshNode, targetWrapper);
+            const tbResizer = freshNode.querySelector('.textbox-resizer');
+            if (tbResizer) makeTextboxResizable(freshNode, tbResizer);
+
+            freshNode.addEventListener('dblclick', () => {
+                txtContent.contentEditable = true;
+                txtContent.focus();
+            });
+            txtContent.addEventListener('blur', () => {
+                txtContent.contentEditable = false;
+            });
+            freshNode.addEventListener('mousedown', () => {
+                document.querySelectorAll('.draggable-text, .draggable-signature, .draggable-textbox').forEach(el => el.classList.remove('active'));
+                freshNode.classList.add('active');
+            });
+            const tbDelBtn = freshNode.querySelector('.text-delete-btn');
+            if (tbDelBtn) {
+                tbDelBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    freshNode.remove();
+                };
+            }
+
         } else if (anno.type === 'signature') {
             const img = freshNode.querySelector('img');
             if (img) {
@@ -366,13 +414,14 @@ function addTextOverlay(defaultText, isEditable = true) {
     }
 
     wrapper.addEventListener('mousedown', () => {
-        document.querySelectorAll('.draggable-text, .draggable-signature').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.draggable-text, .draggable-signature, .draggable-textbox').forEach(el => el.classList.remove('active'));
         wrapper.classList.add('active');
     });
 
     document.addEventListener('click', (e) => {
         if (!wrapper.contains(e.target) &&
             !e.target.closest('#addTextBtn') &&
+            !e.target.closest('#drawTextBoxBtn') &&
             !e.target.closest('#symbolsGroup') &&
             !e.target.closest('#textToolbar') &&
             !e.target.closest('#colorPickerGroup')) {
@@ -399,6 +448,195 @@ addTextBtn.addEventListener('click', () => {
 document.getElementById('addCheckBtn').addEventListener('click', () => addTextOverlay('✔', false));
 document.getElementById('addXBtn').addEventListener('click', () => addTextOverlay('✘', false));
 document.getElementById('addCircleBtn').addEventListener('click', () => addTextOverlay('●', false));
+
+// ===== DRAWABLE TEXT BOX TOOL =====
+let isDrawingTextBox = false;
+let drawStartX = 0, drawStartY = 0;
+let drawWrapper = null;
+let drawPreview = null;
+
+const drawTextBoxBtn = document.getElementById('drawTextBoxBtn');
+drawTextBoxBtn.addEventListener('click', () => {
+    isDrawingTextBox = !isDrawingTextBox;
+    drawTextBoxBtn.classList.toggle('drawing-active', isDrawingTextBox);
+    document.querySelectorAll('.pdf-page-wrapper').forEach(w => {
+        w.classList.toggle('draw-mode', isDrawingTextBox);
+    });
+});
+
+// Listen on pdfContainer for mousedown on any page wrapper
+pdfContainer.addEventListener('mousedown', (e) => {
+    if (!isDrawingTextBox) return;
+    const wrapper = e.target.closest('.pdf-page-wrapper');
+    if (!wrapper) return;
+    // Don't start drawing if clicking on existing annotations
+    if (e.target.closest('.draggable-text, .draggable-textbox, .draggable-signature')) return;
+
+    e.preventDefault();
+    const wrapperRect = wrapper.getBoundingClientRect();
+    drawStartX = e.clientX - wrapperRect.left;
+    drawStartY = e.clientY - wrapperRect.top;
+    drawWrapper = wrapper;
+
+    // Create a preview rectangle
+    drawPreview = document.createElement('div');
+    drawPreview.style.position = 'absolute';
+    drawPreview.style.left = drawStartX + 'px';
+    drawPreview.style.top = drawStartY + 'px';
+    drawPreview.style.width = '0px';
+    drawPreview.style.height = '0px';
+    drawPreview.style.border = '2px dashed var(--primary-color)';
+    drawPreview.style.background = 'rgba(211, 47, 47, 0.05)';
+    drawPreview.style.zIndex = '200';
+    drawPreview.style.pointerEvents = 'none';
+    wrapper.appendChild(drawPreview);
+
+    function onMouseMove(ev) {
+        if (!drawPreview) return;
+        const curX = ev.clientX - wrapperRect.left;
+        const curY = ev.clientY - wrapperRect.top;
+        const x = Math.min(drawStartX, curX);
+        const y = Math.min(drawStartY, curY);
+        const w = Math.abs(curX - drawStartX);
+        const h = Math.abs(curY - drawStartY);
+        drawPreview.style.left = x + 'px';
+        drawPreview.style.top = y + 'px';
+        drawPreview.style.width = w + 'px';
+        drawPreview.style.height = h + 'px';
+    }
+
+    function onMouseUp(ev) {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        if (!drawPreview || !drawWrapper) return;
+
+        const curX = ev.clientX - wrapperRect.left;
+        const curY = ev.clientY - wrapperRect.top;
+        const finalX = Math.min(drawStartX, curX);
+        const finalY = Math.min(drawStartY, curY);
+        const finalW = Math.abs(curX - drawStartX);
+        const finalH = Math.abs(curY - drawStartY);
+
+        drawPreview.remove();
+        drawPreview = null;
+
+        // Only create textbox if it's at least 20x20
+        if (finalW < 20 || finalH < 20) {
+            drawWrapper = null;
+            return;
+        }
+
+        createTextBox(drawWrapper, finalX, finalY, finalW, finalH);
+        drawWrapper = null;
+
+        // Turn off draw mode after creating
+        isDrawingTextBox = false;
+        drawTextBoxBtn.classList.remove('drawing-active');
+        document.querySelectorAll('.pdf-page-wrapper').forEach(w => {
+            w.classList.remove('draw-mode');
+        });
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+});
+
+function createTextBox(targetPage, x, y, w, h) {
+    const box = document.createElement('div');
+    box.className = 'draggable-textbox active';
+    box.style.left = x + 'px';
+    box.style.top = y + 'px';
+    box.style.width = w + 'px';
+    box.style.height = h + 'px';
+
+    const textContent = document.createElement('div');
+    textContent.className = 'text-content';
+    textContent.style.color = currentColor;
+    textContent.style.cursor = 'text';
+    textContent.style.minWidth = '20px';
+    textContent.innerText = 'Double-click to edit';
+
+    const deleteBtn = document.createElement('div');
+    deleteBtn.className = 'text-delete-btn';
+    deleteBtn.innerHTML = '×';
+    deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        box.remove();
+    };
+
+    const resizer = document.createElement('div');
+    resizer.className = 'textbox-resizer';
+
+    box.appendChild(textContent);
+    box.appendChild(deleteBtn);
+    box.appendChild(resizer);
+    targetPage.appendChild(box);
+
+    makeDraggable(box, targetPage);
+    makeTextboxResizable(box, resizer);
+
+    box.addEventListener('dblclick', () => {
+        textContent.contentEditable = true;
+        textContent.focus();
+        document.execCommand('selectAll', false, null);
+    });
+
+    textContent.addEventListener('blur', () => {
+        textContent.contentEditable = false;
+        if (textContent.innerText.trim() === '') {
+            textContent.innerText = 'Double-click to edit';
+        }
+    });
+
+    box.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('textbox-resizer')) return;
+        document.querySelectorAll('.draggable-text, .draggable-signature, .draggable-textbox').forEach(el => el.classList.remove('active'));
+        box.classList.add('active');
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!box.contains(e.target) &&
+            !e.target.closest('#drawTextBoxBtn') &&
+            !e.target.closest('#textToolbar') &&
+            !e.target.closest('#colorPickerGroup')) {
+            box.classList.remove('active');
+        }
+    });
+
+    return box;
+}
+
+function makeTextboxResizable(box, resizer) {
+    let isResizing = false;
+    let startX, startY, startW, startH;
+
+    resizer.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        isResizing = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startW = box.offsetWidth;
+        startH = box.offsetHeight;
+
+        document.addEventListener('mousemove', resize);
+        document.addEventListener('mouseup', stopResize);
+    });
+
+    function resize(e) {
+        if (!isResizing) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        box.style.width = Math.max(40, startW + dx) + 'px';
+        box.style.height = Math.max(20, startH + dy) + 'px';
+    }
+
+    function stopResize() {
+        isResizing = false;
+        document.removeEventListener('mousemove', resize);
+        document.removeEventListener('mouseup', stopResize);
+    }
+}
 
 // Mobile Menu Toggle
 const mobileMenuBtn = document.getElementById('mobileMenuBtn');
@@ -429,7 +667,7 @@ const btnIncreaseText = document.getElementById('btnIncreaseText');
 const btnDecreaseText = document.getElementById('btnDecreaseText');
 
 btnIncreaseText.addEventListener('click', () => {
-    const activeText = document.querySelector('.draggable-text.active .text-content');
+    const activeText = document.querySelector('.draggable-text.active .text-content, .draggable-textbox.active .text-content');
     if (activeText) {
         let currentSize = parseInt(window.getComputedStyle(activeText).fontSize);
         activeText.style.fontSize = (currentSize + 2) + 'px';
@@ -437,7 +675,7 @@ btnIncreaseText.addEventListener('click', () => {
 });
 
 btnDecreaseText.addEventListener('click', () => {
-    const activeText = document.querySelector('.draggable-text.active .text-content');
+    const activeText = document.querySelector('.draggable-text.active .text-content, .draggable-textbox.active .text-content');
     if (activeText) {
         let currentSize = parseInt(window.getComputedStyle(activeText).fontSize);
         activeText.style.fontSize = Math.max(8, currentSize - 2) + 'px';
@@ -453,7 +691,7 @@ document.querySelectorAll('.color-swatch').forEach(swatch => {
         currentColor = swatch.dataset.color;
 
         // Apply color to currently active text element
-        const activeText = document.querySelector('.draggable-text.active .text-content');
+        const activeText = document.querySelector('.draggable-text.active .text-content, .draggable-textbox.active .text-content');
         if (activeText) {
             activeText.style.color = currentColor;
         }
@@ -685,19 +923,17 @@ function isCanvasBlank(canvas) {
     return canvas.toDataURL() === blank.toDataURL();
 }
 
-// Extract pure text ignoring the delete button
-function extractTextSafely(element) {
+// Extract pure text from the .text-content child only
+function extractTextFromContent(textContentEl) {
     let text = '';
-    for (const node of element.childNodes) {
+    for (const node of textContentEl.childNodes) {
         if (node.nodeType === Node.TEXT_NODE) {
             text += node.textContent;
         } else if (node.nodeName === 'DIV' || node.nodeName === 'BR') {
-            if (node.classList && node.classList.contains('text-delete-btn')) continue;
-            // A new div or br usually means a new line in contenteditable
-            text += '\n' + extractTextSafely(node);
+            text += '\n' + extractTextFromContent(node);
         }
     }
-    return text.replace(/\n{2,}/g, '\n'); // simple cleanup
+    return text.replace(/\n{2,}/g, '\n');
 }
 
 // Saving using pdf-lib
@@ -738,71 +974,82 @@ saveBtn.addEventListener('click', async () => {
             const pdfOriginalWidth = pData.originalWidth;
             const pdfOriginalHeight = pData.originalHeight;
 
-            // Process Texts
-            const texts = wrapper.querySelectorAll('.draggable-text');
-            texts.forEach(wrapperEl => {
+            // Helper to parse element color to pdf-lib rgb()
+            function parseColorToRgb(elColor) {
+                if (elColor) {
+                    const hexMatch = elColor.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+                    if (hexMatch) {
+                        return rgb(
+                            parseInt(hexMatch[1], 16) / 255,
+                            parseInt(hexMatch[2], 16) / 255,
+                            parseInt(hexMatch[3], 16) / 255
+                        );
+                    }
+                    const rgbMatch = elColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                    if (rgbMatch) {
+                        return rgb(
+                            parseInt(rgbMatch[1]) / 255,
+                            parseInt(rgbMatch[2]) / 255,
+                            parseInt(rgbMatch[3]) / 255
+                        );
+                    }
+                }
+                return rgb(0, 0, 0);
+            }
+
+            // Process Texts (inline text blocks + drawable textboxes)
+            const allTextEls = wrapper.querySelectorAll('.draggable-text, .draggable-textbox');
+            allTextEls.forEach(wrapperEl => {
                 const textContentEl = wrapperEl.querySelector('.text-content');
                 if (!textContentEl) return;
 
-                const textContent = extractTextSafely(wrapperEl).trim();
+                const textContent = extractTextFromContent(textContentEl).trim();
                 if (!textContent || textContent === 'Double-click to edit') return;
 
                 const left = parseFloat(wrapperEl.style.left) || 0;
                 const top = parseFloat(wrapperEl.style.top) || 0;
 
-                // HTML mapped top to PDF (PDF y=0 is bottom)
+                // HTML top to PDF (PDF y=0 is bottom)
                 const pdfY_top = ((containerHeight - top) / containerHeight) * pdfOriginalHeight;
                 const pdfX = (left / containerWidth) * pdfOriginalWidth;
 
-                // Extract custom font size if present
-                let fontSize = 14; // Default
+                // Extract custom font size
+                let fontSize = 14;
                 if (textContentEl.style.fontSize) {
                     fontSize = parseInt(textContentEl.style.fontSize);
                 }
 
-                const pdfFontSize = (fontSize / pData.scale) * 1.25;
+                // Convert screen font size to PDF points — divide by scale only
+                const pdfFontSize = fontSize / pData.scale;
                 const lineHeight = pdfFontSize * 1.2;
 
-                // Handle special symbols that crash standard Helvetica
+                // For textboxes, calculate maxWidth to constrain text
+                let maxWidth = undefined;
+                if (wrapperEl.classList.contains('draggable-textbox')) {
+                    const boxWidth = parseFloat(wrapperEl.style.width) || wrapperEl.offsetWidth;
+                    maxWidth = (boxWidth / containerWidth) * pdfOriginalWidth;
+                }
+
+                // Handle special symbols
                 let fontToUse = helveticaFont;
                 let textToDraw = textContent;
-
-                // Use ZapfDingbats which natively supports these Unicode symbols in pdf-lib
                 if (textContent === '✔' || textContent === '✘' || textContent === '●') {
                     fontToUse = dingbatsFont;
                 }
 
-                pdfPage.drawText(textToDraw, {
-                    x: pdfX + 2, // Slight padding adjustment
-                    y: pdfY_top - pdfFontSize, // Align top baseline
+                const drawOptions = {
+                    x: pdfX + 2,
+                    y: pdfY_top - pdfFontSize,
                     size: pdfFontSize,
                     lineHeight: lineHeight,
                     font: fontToUse,
-                    color: (() => {
-                        const elColor = textContentEl.style.color;
-                        if (elColor) {
-                            // Parse hex colors like #D32F2F
-                            const hexMatch = elColor.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-                            if (hexMatch) {
-                                return rgb(
-                                    parseInt(hexMatch[1], 16) / 255,
-                                    parseInt(hexMatch[2], 16) / 255,
-                                    parseInt(hexMatch[3], 16) / 255
-                                );
-                            }
-                            // Parse rgb() colors
-                            const rgbMatch = elColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-                            if (rgbMatch) {
-                                return rgb(
-                                    parseInt(rgbMatch[1]) / 255,
-                                    parseInt(rgbMatch[2]) / 255,
-                                    parseInt(rgbMatch[3]) / 255
-                                );
-                            }
-                        }
-                        return rgb(0, 0, 0);
-                    })(),
-                });
+                    color: parseColorToRgb(textContentEl.style.color),
+                };
+                if (maxWidth) {
+                    drawOptions.maxWidth = maxWidth - 8; // account for padding
+                }
+
+                pdfPage.drawText(textToDraw, drawOptions);
             });
 
             // Process Signatures

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+</head>
+
+<body>
+    <script>
+        async function test() {
+            const { PDFDocument, StandardFonts } = window.PDFLib;
+            const doc = await PDFDocument.create();
+            const page = doc.addPage();
+            const dingbats = await doc.embedFont(StandardFonts.ZapfDingbats);
+
+            try {
+                page.drawText('✔', { font: dingbats });
+                console.log('Success with ✔');
+            } catch (e) { console.error('✔ failed:', e); }
+
+            try {
+                page.drawText('✗', { font: dingbats });
+                console.log('Success with ✗');
+            } catch (e) { console.error('✗ failed:', e); }
+
+            try {
+                page.drawText('⬤', { font: dingbats });
+                console.log('Success with ⬤');
+            } catch (e) { console.error('⬤ failed:', e); }
+
+            try {
+                page.drawText('l', { font: dingbats });
+                console.log('Success with l');
+            } catch (e) { console.error('l failed:', e); }
+        }
+        test().catch(console.error);
+    </script>
+</body>
+
+</html>
